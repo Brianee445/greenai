@@ -98,6 +98,9 @@ serve(async (req) => {
     const { data: paymentAttempt } = await supabase
       .from('payment_attempts')
       .insert({
+        user_id: user.id,
+        plan_id: plan.id,
+        billing_cycle,
         reference: paystackRes.data.reference,
         authorization_url: paystackRes.data.authorization_url,
         access_code: paystackRes.data.access_code,

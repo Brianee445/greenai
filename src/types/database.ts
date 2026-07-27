@@ -1,6 +1,15 @@
+export type UserRole = 'user' | 'admin' | 'super_admin';
+
 export interface Profile {
   id: string;
   email: string | null;
+  role: UserRole;
+  display_name: string | null;
+  banned_at: string | null;
+  suspended_at: string | null;
+  ban_reason: string | null;
+  deleted_at: string | null;
+  valid_from: string;
   created_at: string;
   updated_at: string;
 }
@@ -8,12 +17,16 @@ export interface Profile {
 export interface NewProfile {
   id: string;
   email?: string | null;
+  role?: UserRole;
+  display_name?: string | null;
   created_at?: string;
   updated_at?: string;
 }
 
 export interface UpdateProfile {
   email?: string | null;
+  display_name?: string | null;
+  role?: UserRole;
   updated_at?: string;
 }
 
@@ -153,6 +166,127 @@ export interface FileUpload {
   uploaded_at: string;
 }
 
+export interface Permission {
+  id: string;
+  permission_key: string;
+  description: string | null;
+  super_admin_only: boolean;
+  created_at: string;
+}
+
+export interface AdminPermission {
+  id: string;
+  admin_id: string;
+  permission_key: string;
+  granted_by: string;
+  created_at: string;
+  deleted_at: string | null;
+}
+
+export interface FeatureFlag {
+  id: string;
+  flag_key: string;
+  description: string | null;
+  enabled: boolean;
+  target_type: 'global' | 'user' | 'plan' | 'beta';
+  target_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NewFeatureFlag {
+  flag_key: string;
+  description?: string | null;
+  enabled?: boolean;
+  target_type?: 'global' | 'user' | 'plan' | 'beta';
+  target_id?: string | null;
+}
+
+export interface UpdateFeatureFlag {
+  description?: string | null;
+  enabled?: boolean;
+  target_type?: 'global' | 'user' | 'plan' | 'beta';
+  target_id?: string | null;
+  updated_at?: string;
+}
+
+export interface AdminAuditLogEntry {
+  id: string;
+  admin_id: string;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  metadata: Record<string, unknown>;
+  ip_address: string | null;
+  created_at: string;
+}
+
+export interface AnalyticsEvent {
+  id: string;
+  event_type: string;
+  user_id: string | null;
+  session_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ConversationRow {
+  id: string;
+  user_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NewConversationRow {
+  id: string;
+  user_id: string;
+  title?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface UpdateConversationRow {
+  title?: string;
+  updated_at?: string;
+}
+
+export interface MessageRow {
+  id: string;
+  conversation_id: string;
+  user_id: string;
+  role: 'user' | 'ai';
+  content: string;
+  mode: string | null;
+  model: string | null;
+  liked: boolean;
+  disliked: boolean;
+  web_search: boolean;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface NewMessageRow {
+  id: string;
+  conversation_id: string;
+  user_id: string;
+  role: 'user' | 'ai';
+  content: string;
+  mode?: string | null;
+  model?: string | null;
+  liked?: boolean;
+  disliked?: boolean;
+  web_search?: boolean;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+}
+
+export interface UpdateMessageRow {
+  liked?: boolean;
+  disliked?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -205,6 +339,41 @@ export interface Database {
         Row: FileUpload;
         Insert: Omit<FileUpload, 'id' | 'uploaded_at'>;
         Update: Partial<Omit<FileUpload, 'id'>>;
+      };
+      conversations: {
+        Row: ConversationRow;
+        Insert: NewConversationRow;
+        Update: UpdateConversationRow;
+      };
+      messages: {
+        Row: MessageRow;
+        Insert: NewMessageRow;
+        Update: UpdateMessageRow;
+      };
+      feature_flags: {
+        Row: FeatureFlag;
+        Insert: NewFeatureFlag;
+        Update: UpdateFeatureFlag;
+      };
+      admin_audit_logs: {
+        Row: AdminAuditLogEntry;
+        Insert: Omit<AdminAuditLogEntry, 'id' | 'created_at'>;
+        Update: Partial<Omit<AdminAuditLogEntry, 'id'>>;
+      };
+      permissions: {
+        Row: Permission;
+        Insert: Omit<Permission, 'id' | 'created_at'>;
+        Update: Partial<Omit<Permission, 'id'>>;
+      };
+      admin_permissions: {
+        Row: AdminPermission;
+        Insert: Omit<AdminPermission, 'id' | 'created_at'>;
+        Update: Partial<Omit<AdminPermission, 'id'>>;
+      };
+      analytics_events: {
+        Row: AnalyticsEvent;
+        Insert: Omit<AnalyticsEvent, 'id' | 'created_at'>;
+        Update: Partial<Omit<AnalyticsEvent, 'id'>>;
       };
     };
   };

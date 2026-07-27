@@ -4,21 +4,24 @@ import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
 import { ChatInput } from './components/ChatInput';
 import { SettingsModal } from './components/SettingsModal';
+import { useChatStorage } from './hooks/useChatStorage';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { useAuth } from './auth/hooks/useAuth';
 import { useAuthModal } from './auth/providers/AuthModalProvider';
 import { sendMessage } from './services/geminiApi';
 import { clearConversationMemory } from './utils/memoryUtils';
-import { Message, Conversation, AppSettings } from './types';
+import { Message, AppSettings } from './types';
 import { checkQuota, recordUsage } from './subscriptions/services/api';
 import { useSubscriptionContext } from './subscriptions/providers/SubscriptionProvider';
 import { getAllowedModels } from './subscriptions/utils/quota';
 
 export default function App() {
-  const [messages, setMessages] = useLocalStorage<Message[]>('greenai-messages', []);
-  const [conversations, setConversations] = useLocalStorage<Conversation[]>('greenai-conversations', []);
-  const [currentConversationId, setCurrentConversationId] = useState(() => `conv-${Date.now()}`);
-  const [settings, setSettings] = useLocalStorage<AppSettings>('greenai-settings', {
+  const { user, signOut } = useAuth();
+  const { showAuthModal } = useAuthModal();
+  const { plan } = useSubscriptionContext();
+  const isAuthenticated = !!user;
+
+  const [settings, setSettings] = useLocalStorage('greenai-settings', {
     currentMode: 'basic',
     currentModel: 'gx-2.0',
     darkMode: true,
@@ -36,15 +39,37 @@ export default function App() {
     }
   });
 
+  const {
+    messages,
+    conversations,
+    currentConversationId,
+    setMessages,
+    setConversations,
+    setCurrentConversationId,
+    loadConversation: loadConversationFromHook,
+    handleNewChat: handleNewChatFromHook,
+    handleDeleteConversation: handleDeleteConversationFromHook,
+  } = useChatStorage(user);
+
+  const loadConversation = useCallback((conversationId: string) => {
+    loadConversationFromHook(conversationId, settings.autoSave);
+    if (window.innerWidth < 1024) setIsSidebarOpen(false);
+  }, [loadConversationFromHook, settings.autoSave]);
+
+  const handleNewChat = useCallback(() => {
+    handleNewChatFromHook(settings.autoSave);
+    if (window.innerWidth < 1024) setIsSidebarOpen(false);
+  }, [handleNewChatFromHook, settings.autoSave]);
+
+  const handleDeleteConversation = useCallback((id: string) => {
+    handleDeleteConversationFromHook(id);
+  }, [handleDeleteConversationFromHook]);
+
   const [isTyping, setIsTyping] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true); // ChatGPT: sidebar open by default on desktop
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
-  const { user, signOut } = useAuth();
-  const { showAuthModal } = useAuthModal();
-  const { plan } = useSubscriptionContext();
-  const isAuthenticated = !!user;
 
   const handleAuthRequired = useCallback((feature: string) => {
     const messages: Record<string, { title: string; description: string }> = {
@@ -95,59 +120,6 @@ export default function App() {
     }, 3000);
     return () => clearInterval(interval);
   }, [friendlyMessages.length]);
-
-  // ─── Conversation helpers ──────────────────────────────────────────────────
-
-  const saveCurrentConversation = useCallback(() => {
-    if (!Array.isArray(messages) || messages.length === 0) return;
-
-    const existingIndex = conversations.findIndex(c => c.id === currentConversationId);
-    const firstUserMsg = messages.find(m => m.sender === 'user')?.text ?? '';
-    const title = firstUserMsg.slice(0, 50) + (firstUserMsg.length > 50 ? '...' : '') || 'New chat';
-
-    const conversation: Conversation = {
-      id: currentConversationId,
-      title,
-      messages,
-      createdAt: existingIndex >= 0 ? conversations[existingIndex].createdAt : Date.now(),
-      updatedAt: Date.now()
-    };
-
-    if (existingIndex >= 0) {
-      const updated = [...conversations];
-      updated[existingIndex] = conversation;
-      setConversations(updated);
-    } else {
-      setConversations([conversation, ...conversations]);
-    }
-  }, [messages, conversations, currentConversationId]);
-
-  const loadConversation = (conversationId: string) => {
-    if (Array.isArray(messages) && messages.length > 0 && settings.autoSave) {
-      saveCurrentConversation();
-    }
-    const conversation = conversations.find(c => c.id === conversationId);
-    if (conversation) {
-      setMessages(conversation.messages || []);
-      setCurrentConversationId(conversation.id);
-    }
-    // On mobile, close sidebar after selecting — on desktop keep it open (ChatGPT behaviour)
-    if (window.innerWidth < 1024) setIsSidebarOpen(false);
-  };
-
-  const handleNewChat = () => {
-    if (Array.isArray(messages) && messages.length > 0 && settings.autoSave) {
-      saveCurrentConversation();
-    }
-    setMessages([]);
-    setCurrentConversationId(`conv-${Date.now()}`);
-    if (window.innerWidth < 1024) setIsSidebarOpen(false);
-  };
-
-  const handleDeleteConversation = (id: string) => {
-    setConversations((prev: any[]) => prev.filter(c => c.id !== id));
-    if (id === currentConversationId) handleNewChat();
-  };
 
   // ─── Messaging ────────────────────────────────────────────────────────────
 
@@ -252,13 +224,6 @@ export default function App() {
   };
 
   // ─── Side effects ─────────────────────────────────────────────────────────
-
-  // Auto-save on message change
-  useEffect(() => {
-    if (!Array.isArray(messages) || messages.length === 0 || !settings.autoSave) return;
-    const id = setTimeout(saveCurrentConversation, 100);
-    return () => clearTimeout(id);
-  }, [messages, saveCurrentConversation, settings.autoSave]);
 
   // Document title
   useEffect(() => {
