@@ -11,7 +11,7 @@ import {
   getConversationContext
 } from '../utils/memoryUtils';
 import { UserProfile } from '../types';
-import { supabase } from '../lib/supabaseClient'; // ← adjust this path to wherever your Supabase client is exported from
+import { supabase } from '../lib/supabase';
 
 interface UploadedFile {
   file: File;
