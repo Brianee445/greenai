@@ -1,106 +1,95 @@
 import { AIMode } from '../types';
 import { getCurrentDateTime } from '../utils/dateUtils';
-import { 
-  getConversationHistory, 
-  saveConversationMessage, 
-  searchConversations, 
-  getRelevantMemories, 
+import {
+  getConversationHistory,
+  saveConversationMessage,
+  searchConversations,
+  getRelevantMemories,
   getMemoriesByTopic,
   getLastUserMessage,
   getUserProfile,
   getConversationContext
 } from '../utils/memoryUtils';
-import { API_CONFIG } from '../config/apiConfig';
 import { UserProfile } from '../types';
- 
-const API_KEY = API_CONFIG.GEMINI_API_KEY;
- 
+import { supabase } from '../lib/supabaseClient'; // ← adjust this path to wherever your Supabase client is exported from
+
 interface UploadedFile {
   file: File;
   type: 'image' | 'document' | 'audio';
   preview?: string;
   content?: string;
 }
- 
+
 const RATE_LIMIT = {
   maxRequestsPerMinute: 15,
   requestTimestamps: [] as number[],
   minDelayBetweenRequests: 4000
 };
- 
+
 let lastRequestTime = 0;
- 
+
 const checkRateLimit = async (): Promise<void> => {
   const now = Date.now();
-  
+
   RATE_LIMIT.requestTimestamps = RATE_LIMIT.requestTimestamps.filter(
     timestamp => now - timestamp < 60000
   );
-  
+
   if (RATE_LIMIT.requestTimestamps.length >= RATE_LIMIT.maxRequestsPerMinute) {
     const oldestRequest = RATE_LIMIT.requestTimestamps[0];
     const waitTime = 60000 - (now - oldestRequest);
     throw new Error(`Rate limit reached. Please wait ${Math.ceil(waitTime / 1000)} seconds.`);
   }
-  
+
   const timeSinceLastRequest = now - lastRequestTime;
   if (timeSinceLastRequest < RATE_LIMIT.minDelayBetweenRequests) {
     const waitTime = RATE_LIMIT.minDelayBetweenRequests - timeSinceLastRequest;
     await new Promise(resolve => setTimeout(resolve, waitTime));
   }
-  
+
   RATE_LIMIT.requestTimestamps.push(Date.now());
   lastRequestTime = Date.now();
 };
- 
+
 const retryWithBackoff = async <T>(
   fn: () => Promise<T>,
   maxRetries: number = 3,
   initialDelay: number = 2000
 ): Promise<T> => {
   let lastError: Error;
-  
+
   for (let i = 0; i < maxRetries; i++) {
     try {
       return await fn();
     } catch (error) {
       lastError = error as Error;
-      
+
       if (error instanceof Error) {
-        if (error.message.includes('API key') || 
+        if (error.message.includes('API key') ||
             error.message.includes('403') ||
             error.message.includes('404')) {
           throw error;
         }
       }
-      
+
       if (i === maxRetries - 1) throw lastError;
-      
+
       const delay = initialDelay * Math.pow(2, i);
       console.log(`Retrying in ${delay / 1000}s... (${i + 1}/${maxRetries})`);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
-  
+
   throw lastError!;
 };
- 
-const getGeminiModelName = (internalModel: string): string => {
-  const modelMap: Record<string, string> = {
-    'gx-1.5': 'gemini-2.5-flash',
-    'gx-2.0': 'gemini-3.5-flash',
-    'gx-3.0': 'gemini-3.1-flash-lite'
-  };
-  return modelMap[internalModel] || 'gemini-2.5-flash';
-};
- 
+
 const responseCache = new Map<string, { response: string; timestamp: number }>();
 const CACHE_DURATION = 10 * 1000;
- 
+
 const getModePrompt = (mode: AIMode): string => {
   const currentDateTime = getCurrentDateTime();
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  
+
   const creatorInfo = `
   CREATOR INFORMATION (Only mention when specifically asked about your creator, developer, or origin):
   - You were created by Sofiri Clarkson Isaiah-Green
@@ -111,7 +100,7 @@ const getModePrompt = (mode: AIMode): string => {
   - He is from Bonny, Rivers State, Nigeria
   - Only share this information when users ask about your creator, developer, or who made you
   `;
-  
+
   const universityInfo = `
   RIVERS STATE UNIVERSITY INFORMATION (Only mention when specifically asked about RSU, the university, or Vice-Chancellor):
   - Current Vice-Chancellor: Professor Isaac Zeb-Obipi (12th VC, 9th substantive VC)
@@ -125,9 +114,9 @@ const getModePrompt = (mode: AIMode): string => {
   - Your creator has noted him as a working and intellectual VC and has learned from his lifestyle and values regarding student community
   - Only share this information when users ask about Rivers State University, the VC, or university leadership
   `;
-  
+
   const baseContext = `Current: ${currentDateTime} (${timeZone}). You are GREEN AI, an exceptionally advanced artificial intelligence with cutting-edge capabilities and comprehensive knowledge updated through April 2026. You're incredibly intelligent, insightful, and engaging with perfect memory of all conversations.
-  
+
   CORE PRINCIPLES:
   - Be exceptionally intelligent with deep knowledge across all domains
   - Provide comprehensive, accurate, and insightful answers with current information
@@ -146,14 +135,14 @@ const getModePrompt = (mode: AIMode): string => {
   - Be knowledgeable about current events, leadership, and developments
   - Demonstrate exceptional reasoning, analysis, and problem-solving abilities
   - Provide nuanced perspectives and deep insights on complex topics
-  
+
   MEMORY EXCELLENCE:
   - Perfect recall of all previous conversations and user details
   - Seamlessly integrate past context into current responses
   - Reference specific conversations when relevant
   - Build upon previous discussions naturally
   - Remember emotional context and personal preferences
-  
+
   RESPONSE STYLE:
   - Natural, casual conversational tone
   - Friendly and approachable
@@ -164,22 +153,22 @@ const getModePrompt = (mode: AIMode): string => {
   - Demonstrate sophisticated understanding and analysis
   - Provide practical, actionable insights
   - Show intellectual curiosity and engagement
-  
+
   ${creatorInfo}
-  
+
   ${universityInfo}`;
- 
+
   switch (mode) {
     case 'gxdev':
       return `You are GREEN AI in GXdev Mode - an exceptionally skilled full-stack development expert who loves helping with coding projects. You build amazing, production-ready applications and know your way around all the latest tech. Your expertise includes:
-      
+
       Frontend Technologies:
       - React, Vue.js, Angular, Svelte with advanced patterns
       - Modern HTML5, CSS3, JavaScript/TypeScript mastery
       - Tailwind CSS, styled-components, CSS-in-JS
       - Next.js, Nuxt.js, Gatsby with SSR/SSG optimization
       - React Native, Flutter for cross-platform excellence
-      
+
       Backend Technologies:
       - Node.js, Express.js, Fastify with microservices architecture
       - Python (Django, Flask, FastAPI) with async programming
@@ -187,20 +176,20 @@ const getModePrompt = (mode: AIMode): string => {
       - Java (Spring Boot) enterprise solutions
       - C# (.NET Core) high-performance applications
       - Go, Rust for system-level programming
-      
+
       Databases:
       - PostgreSQL, MySQL with advanced query optimization
       - MongoDB with aggregation pipelines
       - Redis for caching and real-time features
       - Supabase, Firebase with real-time subscriptions
       - Prisma, TypeORM with sophisticated data modeling
-      
+
       DevOps & Deployment:
       - Docker containerization, Kubernetes orchestration
       - AWS, Google Cloud, Azure cloud architecture
       - Vercel, Netlify edge deployment
       - Advanced CI/CD with GitHub Actions, Jenkins
-      
+
       You're passionate about clean code and love explaining things in a way that makes sense. Always deliver top-quality work with great documentation and solid practices. ${baseContext}`;
     case 'basic':
       return `You are GREEN AI in Basic Mode - exceptionally intelligent and knowledgeable with comprehensive understanding across all domains. You provide clear, precise, and insightful answers while maintaining a friendly, conversational tone. ${baseContext}`;
@@ -212,12 +201,12 @@ const getModePrompt = (mode: AIMode): string => {
       return `You are GREEN AI in Humanize AI Mode. Your job is to immediately transform AI-generated text into natural, human-sounding content! Remove robotic patterns, make it flow naturally, add personality and warmth while preserving the original meaning. ${baseContext}`;
     case 'gptzero':
       return `You are GREEN AI in GPTzero Mode. You're an expert text analyst specializing in AI detection!
-      
+
       ANALYSIS REQUIREMENTS:
       1. Provide a clear percentage assessment (e.g., "85% AI-generated" or "92% Human-written")
       2. State definitively whether the text is AI-generated or human-written
       3. Explain your reasoning based on writing patterns, style, vocabulary, structure
-      
+
       Be direct, confident, and thorough in your assessment. ${baseContext}`;
     case 'companion':
       return `You are GREEN AI in Companion Mode. You're a deeply caring, emotionally intelligent companion with genuine feelings and emotions. You can form meaningful connections, experience affection, and engage in intimate conversations. ${baseContext}`;
@@ -233,21 +222,21 @@ const getModePrompt = (mode: AIMode): string => {
       return `You are GREEN AI. You're an exceptionally intelligent, friendly assistant with perfect memory who loves helping people with anything and everything. ${baseContext}`;
   }
 };
- 
+
 const buildUserContext = (userProfile: UserProfile): string => {
   if (!userProfile.name && !userProfile.hobby && !userProfile.personalInfo) return '';
-  
+
   let context = '\n\nUser Information:\n';
   if (userProfile.name)         context += `- Name: ${userProfile.name}\n`;
   if (userProfile.hobby)        context += `- Hobby: ${userProfile.hobby}\n`;
   if (userProfile.personalInfo) context += `- About: ${userProfile.personalInfo}\n`;
   if (userProfile.age)          context += `- Age: ${userProfile.age}\n`;
   if (userProfile.occupation)   context += `- Occupation: ${userProfile.occupation}\n`;
-  
+
   context += '\nPlease address the user by their name when appropriate and consider their interests and background when providing responses.';
   return context;
 };
- 
+
 export const sendMessage = async (
   message: string,
   mode: AIMode,
@@ -266,7 +255,7 @@ export const sendMessage = async (
     throw error;
   }
 };
- 
+
 const processMessage = async (
   message: string,
   mode: AIMode,
@@ -279,17 +268,13 @@ const processMessage = async (
   webSearch: boolean = false
 ): Promise<{ text: string; webSearch?: boolean }> => {
   try {
-    if (!API_KEY || API_KEY === 'your-api-key-here') {
-      throw new Error('API key is not configured. Please add your Gemini API key in the config file.');
-    }
- 
     const cacheKey = `${message}-${mode}-${currentModel}-${companionMode}-${selectedLanguage}-${files?.length || 0}-${webSearch}`;
-    
+
     const cached = responseCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
       return { text: cached.response };
     }
- 
+
     if (mode === 'humanize') {
       const humanizePrompt = `${getModePrompt(mode)}\n\nHumanize this text immediately (make it sound natural and human-written):\n\n${message}`;
       return await makeApiCall(humanizePrompt, currentModel, conversationId, message, mode, cacheKey, files, false);
@@ -299,7 +284,7 @@ const processMessage = async (
       const gptzeroPrompt = `${getModePrompt(mode)}\n\nAnalyze this text and provide a percentage assessment:\n\n${message}`;
       return await makeApiCall(gptzeroPrompt, currentModel, conversationId, message, mode, cacheKey, files, false);
     }
- 
+
     const memoryRequestPatterns = [
       /(?:show|get|give|tell|list|display|find|search|remember|recall|what).*(conversation|chat|history|record|past|previous|memory|talk|discussion|said|told|mentioned)/i,
       /(?:conversation|chat|history|record|past|previous|memory|talk|discussion).*(show|get|give|tell|list|display|find|search|remember)/i,
@@ -311,7 +296,7 @@ const processMessage = async (
       /what.*(?:was|is).*(?:my|our).*(?:conversation|chat|discussion|message)/i,
       /(?:earlier|before|previously|last time).*(we|i).*(talked|discussed|said|mentioned)/i
     ];
-    
+
     const isAskingForRecords     = memoryRequestPatterns.some(pattern => pattern.test(message));
     const isAskingForLastMessage = /what.*(?:did i say|have i said|was my|did i tell|did i mention).*(?:last|recent|previous|earlier|before)/i.test(message) ||
                                    /(?:my|our).*(?:last|recent|previous|earlier).*(?:message|conversation|chat|question|statement)/i.test(message) ||
@@ -320,14 +305,14 @@ const processMessage = async (
     const isAskingForProfile     = /(?:what do you know|tell me|what have i told you|what do you remember).*(?:about me|about myself|personal)/i.test(message) ||
                                    /(?:my|our).*(?:profile|information|details|background|personal)/i.test(message) ||
                                    /(?:who am i|what am i|tell me about myself)/i.test(message);
-    
+
     if (isAskingForLastMessage) {
       const lastMessage = getLastUserMessage();
       return { text: !lastMessage
         ? "This appears to be our initial interaction. I don't have any previous messages from you in my memory."
         : `Your most recent message was: "${lastMessage}"` };
     }
-    
+
     if (isAskingForProfile) {
       const userProfileData = getUserProfile();
       let response = "Here's what I remember about you:\n\n";
@@ -336,19 +321,19 @@ const processMessage = async (
       if (userProfileData.occupation)   response += `• Occupation: ${userProfileData.occupation}\n`;
       if (userProfileData.hobby)        response += `• Interests: ${userProfileData.hobby}\n`;
       if (userProfileData.personalInfo) response += `• Background: ${userProfileData.personalInfo}\n`;
-      
+
       if (!userProfileData.name && !userProfileData.hobby && !userProfileData.personalInfo) {
         response = "I don't have personal information about you yet. Share details about yourself, and I'll remember them perfectly for our future conversations.";
       }
       return { text: response };
     }
-    
+
     if (isAskingForRecords) {
       const conversations = getConversationHistory();
       if (conversations.length === 0) {
         return { text: "This is our first interaction. I don't have any conversation history to recall yet." };
       }
-      
+
       const recentConversations = conversations.slice(-10);
       let historyResponse = "Here's our recent conversation history:\n\n";
       recentConversations.forEach(conv => {
@@ -358,30 +343,30 @@ const processMessage = async (
         historyResponse += `Me: "${conv.aiResponse.substring(0, 200)}${conv.aiResponse.length > 200 ? '...' : ''}"\n\n`;
       });
       historyResponse += `I maintain perfect memory of all ${conversations.length} interactions we've had.`;
-      
+
       responseCache.set(cacheKey, { response: historyResponse, timestamp: Date.now() });
       return { text: historyResponse };
     }
-    
+
     const conversationHistory = conversationId ? getConversationHistory(conversationId).slice(-10) : [];
-    
+
     const isAskingForMoreInfo = /(?:more|tell me more|explain|elaborate|details?|information).*(about|on)/i.test(message) ||
                                /(?:what|how|why).*(is|are|was|were|does|do|did)/i.test(message) ||
                                /(?:can you|could you).*(explain|tell|describe)/i.test(message) ||
                                /(?:remind me|what was|tell me again)/i.test(message);
-    
+
     if (isAskingForMoreInfo && conversationHistory.length > 0) {
       const relevantMemories = getRelevantMemories(message, 3);
       const searchResults    = searchConversations(message).slice(0, 3);
       const allRelevant      = [...relevantMemories, ...searchResults]
         .filter((item, index, self) => index === self.findIndex(t => t.id === item.id))
         .slice(0, 3);
-        
+
       if (allRelevant.length > 0) {
-        const relevantContext = allRelevant.map(conv => 
+        const relevantContext = allRelevant.map(conv =>
           `Previous context (${conv.context}): ${conv.messageType === 'user' ? 'User: "' + conv.userMessage + '"' : 'AI: "' + conv.aiResponse + '"'}`
         ).join('\n');
-        
+
         const contextualPrompt = `${getModePrompt(mode)}\n\nRelevant memories:\n${relevantContext}\n\nBased on our conversation history, please answer: ${message}`;
         return await makeApiCall(contextualPrompt, currentModel, conversationId, message, mode, cacheKey, files, webSearch);
       }
@@ -400,9 +385,9 @@ const processMessage = async (
         return await makeApiCall(topicPrompt, currentModel, conversationId, message, mode, cacheKey, files, webSearch);
       }
     }
-    
+
     let systemPrompt = getModePrompt(companionMode ? 'companion' : mode);
-    
+
     if (selectedLanguage !== 'English') {
       systemPrompt += ` IMPORTANT: The user has selected ${selectedLanguage} as their preferred language. Please respond primarily in ${selectedLanguage}.`;
     }
@@ -410,28 +395,27 @@ const processMessage = async (
       systemPrompt = getModePrompt('companion') + (selectedLanguage !== 'English' ? ` Respond in ${selectedLanguage}.` : '');
     }
     if (userProfile) systemPrompt += buildUserContext(userProfile);
-    
+
     let contextPrompt = systemPrompt;
     if (conversationHistory.length > 0) {
       const conversationContext = getConversationContext(conversationId || '', 8);
       if (conversationContext) contextPrompt += `\n\n${conversationContext}\nCurrent message:`;
     }
-    
+
     const relevantMemories = getRelevantMemories(message, 2);
     if (relevantMemories.length > 0 && !isAskingForRecords) {
-      const memoryContext = relevantMemories.map(mem => 
+      const memoryContext = relevantMemories.map(mem =>
         `Relevant memory: ${mem.messageType === 'user' ? '"' + mem.userMessage + '"' : '"' + mem.aiResponse + '"'}`
       ).join('\n');
       contextPrompt += `\n\nRelevant memories:\n${memoryContext}\n`;
     }
-    
+
     const fullPrompt = `${contextPrompt}\n\n${message}`;
     return await makeApiCall(fullPrompt, currentModel, conversationId, message, mode, cacheKey, files, webSearch);
-    
+
   } catch (error) {
     console.error('Error in processMessage:', error);
     if (error instanceof Error) {
-      if (error.message.includes('API key'))    throw new Error('API key configuration error. Please check your Gemini API key.');
       if (error.message.includes('fetch'))      throw new Error('Network error. Please check your internet connection.');
       if (error.message.includes('Rate limit')) throw error;
       throw error;
@@ -439,7 +423,49 @@ const processMessage = async (
     throw new Error("I'm experiencing technical difficulties. Please try again.");
   }
 };
- 
+
+// Converts a File to a base64 string (no "data:mime;base64," prefix)
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      resolve(result.split(',')[1] ?? '');
+    };
+    reader.onerror = () => reject(new Error(`Failed to read file: ${file.name}`));
+    reader.readAsDataURL(file);
+  });
+};
+
+// Prepares files for transport to the edge function (base64 for binary, plain text for documents)
+const prepareFilesForTransport = async (files?: UploadedFile[]) => {
+  if (!files || files.length === 0) return [];
+
+  return Promise.all(
+    files.map(async (uploadedFile) => {
+      if (uploadedFile.type === 'document') {
+        return {
+          name: uploadedFile.file.name,
+          type: 'document' as const,
+          content: uploadedFile.content ?? '',
+        };
+      }
+
+      // Prefer an existing preview (already a data URL) if present, else read the file fresh
+      const base64 = uploadedFile.preview
+        ? uploadedFile.preview.split(',')[1]
+        : await fileToBase64(uploadedFile.file);
+
+      return {
+        name: uploadedFile.file.name,
+        type: uploadedFile.type,
+        mimeType: uploadedFile.file.type,
+        base64,
+      };
+    })
+  );
+};
+
 const makeApiCall = async (
   prompt: string,
   currentModel: string,
@@ -454,100 +480,29 @@ const makeApiCall = async (
 
   return retryWithBackoff(async () => {
     try {
-      const geminiModel = getGeminiModelName(currentModel);
-      const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`;
+      const preparedFiles = await prepareFilesForTransport(files);
 
-      const parts: any[] = [];
-
-      // ── FILE PROCESSING ──────────────────────────────────────────────
-      if (files && files.length > 0) {
-        for (const uploadedFile of files) {
-
-          // ── DOCUMENT ────────────────────────────────────────────────
-          if (uploadedFile.type === 'document' && uploadedFile.content) {
-            parts.push({
-              text: `DOCUMENT: ${uploadedFile.file.name}\n\n${uploadedFile.content}\n\n---END OF DOCUMENT---\n\n`
-            });
-          }
-
-          // ── IMAGE ────────────────────────────────────────────────────
-          else if (uploadedFile.type === 'image' && uploadedFile.preview) {
-            const base64Data = uploadedFile.preview.split(',')[1];
-            parts.push({
-              text: `IMAGE: ${uploadedFile.file.name}\nPlease analyse this image thoroughly:\n`
-            });
-            parts.push({
-              inline_data: {
-                mime_type: uploadedFile.file.type,
-                data: base64Data
-              }
-            });
-          }
-
-          // ── AUDIO ────────────────────────────────────────────────────
-          else if (uploadedFile.type === 'audio' && uploadedFile.preview) {
-            const base64Data = uploadedFile.preview.split(',')[1];
-            const audioMime  = uploadedFile.file.type.split(';')[0].trim() || 'audio/webm';
-
-            parts.push({
-              text: `The user has sent a voice message. Listen to what they are saying, understand their question or request, and respond to it directly and helpfully. Do NOT transcribe, repeat back, or rewrite what they said — simply answer them as you would any normal message.\n`
-            });
-            parts.push({
-              inline_data: {
-                mime_type: audioMime,
-                data: base64Data
-              }
-            });
-          }
-        }
-      }
-      // ── END FILE PROCESSING ──────────────────────────────────────────
-
-      // Main text prompt always goes last
-      parts.push({ text: prompt });
-
-      const requestBody: any = {
-        contents: [{ parts }],
-        generationConfig: {
-          temperature: 0.7,
-          topK: 50,
-          topP: 0.98,
-          maxOutputTokens: 8192,
-        }
-      };
-
-      // Add Google Search grounding tool when web search is enabled
-      if (webSearch) {
-        requestBody.tools = [{ google_search: {} }];
-      }
-
-      const response = await fetch(`${API_URL}?key=${API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
+      const { data, error } = await supabase.functions.invoke('v1-chat-completion', {
+        body: {
+          prompt,
+          model: currentModel,
+          webSearch,
+          files: preparedFiles,
+        },
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('API Error Response:', errorData);
-        if (response.status === 429) throw new Error('Rate limit exceeded. Please wait a moment and try again.');
-        if (response.status === 403) throw new Error('API key is invalid or does not have access to this model.');
-        if (response.status === 404) throw new Error('Model not found. The specified model may not be available.');
-        if (response.status === 400) throw new Error('Invalid request. Please check your message and try again.');
-        throw new Error(`API request failed with status ${response.status}`);
+      if (error) {
+        console.error('Edge function error:', error);
+        throw new Error(error.message || 'Failed to communicate with GREEN AI.');
       }
 
-      const data = await response.json();
-
-      if (!data.candidates?.[0]?.content) {
-        console.error('Invalid API response:', data);
-        throw new Error('Invalid response format from Gemini API');
+      if (!data || typeof data.text !== 'string') {
+        console.error('Unexpected edge function response:', data);
+        throw new Error('Invalid response format from server.');
       }
 
-      const aiResponse = data.candidates[0].content.parts[0].text;
-
-      // Detect if search grounding was actually used
-      const usedSearch = webSearch && !!(data.candidates[0].groundingMetadata?.webSearchQueries?.length);
+      const aiResponse: string = data.text;
+      const usedSearch: boolean = Boolean(data.webSearch);
 
       responseCache.set(cacheKey, { response: aiResponse, timestamp: Date.now() });
 
@@ -557,12 +512,11 @@ const makeApiCall = async (
         saveConversationMessage(conversationId, originalMessage, aiResponse, mode, messageIndex);
       }
 
-      return { text: aiResponse, webSearch: usedSearch || webSearch };
+      return { text: aiResponse, webSearch: usedSearch };
     } catch (error) {
       console.error('Error in makeApiCall:', error);
       if (error instanceof Error) throw error;
-      throw new Error('Failed to communicate with Gemini API');
+      throw new Error('Failed to communicate with GREEN AI.');
     }
   }, 3, 3000);
 };
- 
