@@ -10,8 +10,6 @@
 // Set the secret (once) with:
 //   supabase secrets set GEMINI_API_KEY=your-real-key-here
 
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
-
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
 
 const corsHeaders = {
@@ -46,7 +44,7 @@ function getGeminiModelName(internalModel: string): string {
   return MODEL_MAP[internalModel] || "gemini-2.5-flash";
 }
 
-serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
