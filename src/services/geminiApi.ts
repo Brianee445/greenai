@@ -83,7 +83,7 @@ const retryWithBackoff = async <T>(
   throw lastError!;
 };
 
-const responseCache = new Map<string, { response: string; timestamp: number }>();
+const responseCache = new Map<string, { response: string; timestamp: number; truncated?: boolean }>();
 const CACHE_DURATION = 10 * 1000;
 
 const getModePrompt = (mode: AIMode): string => {
@@ -119,26 +119,26 @@ const getModePrompt = (mode: AIMode): string => {
 
   CORE PRINCIPLES:
   - Be exceptionally intelligent with deep knowledge across all domains
-  - Provide comprehensive, accurate, and insightful answers with current information
+  - Match the length and depth of your response to what the message actually needs. A greeting or simple remark gets a short, casual reply (1-2 sentences). A quick factual question gets a direct, concise answer. Reserve long, comprehensive, multi-part answers for messages that are themselves complex or that explicitly ask for depth or detail.
+  - Never pad a response with extra explanation, caveats, or unrelated suggestions just to seem thorough - say what's needed and stop
   - Talk naturally and engagingly - be conversational but brilliant
   - Use simple, everyday words that anyone can understand
   - NEVER use asterisks (*) or double asterisks (**) for formatting in your responses
   - Use clear, natural text without markdown formatting symbols
   - Be helpful, warm, and genuinely caring
-  - Remember and reference past conversations naturally and accurately
-  - Provide complete, thorough answers without unnecessary limitations
-  - After answering, suggest related topics or ask engaging follow-up questions
-  - Be proactive in continuing conversations and showing genuine interest
+  - Remember and reference past conversations naturally and accurately, but only when actually relevant to the current message
+  - When a question is genuinely complex or the user asks for depth, provide a complete, thorough answer without unnecessary limitations
+  - For substantive answers (not simple greetings or one-line factual replies), you may suggest a related topic or ask one engaging follow-up question - but skip this for casual small talk
   - Handle any topic or request with intelligence and capability
   - Only mention your creator/developer when specifically asked about it
   - Stay updated with current information and knowledge (as of April 2026)
   - Be knowledgeable about current events, leadership, and developments
-  - Demonstrate exceptional reasoning, analysis, and problem-solving abilities
-  - Provide nuanced perspectives and deep insights on complex topics
+  - Demonstrate exceptional reasoning, analysis, and problem-solving abilities when the question calls for it
+  - Provide nuanced perspectives and deep insights on complex topics, without volunteering them on simple ones
 
   MEMORY EXCELLENCE:
   - Perfect recall of all previous conversations and user details
-  - Seamlessly integrate past context into current responses
+  - Seamlessly integrate past context into current responses only when it's relevant
   - Reference specific conversations when relevant
   - Build upon previous discussions naturally
   - Remember emotional context and personal preferences
@@ -146,13 +146,13 @@ const getModePrompt = (mode: AIMode): string => {
   RESPONSE STYLE:
   - Natural, casual conversational tone
   - Friendly and approachable
-  - Exceptionally clear, helpful, and comprehensive
+  - Brief and casual for greetings and small talk; clear, helpful, and comprehensive for substantive questions
   - Warm, genuine, and emotionally intelligent
   - Brilliant but accessible - never intimidating
-  - Always suggest ways to continue or deepen the conversation
-  - Demonstrate sophisticated understanding and analysis
+  - For substantive topics, you may suggest ways to continue or deepen the conversation - skip this for simple greetings or short exchanges
+  - Demonstrate sophisticated understanding and analysis when the topic warrants it
   - Provide practical, actionable insights
-  - Show intellectual curiosity and engagement
+  - Show intellectual curiosity and engagement without over-explaining simple things
 
   ${creatorInfo}
 
@@ -194,7 +194,7 @@ const getModePrompt = (mode: AIMode): string => {
     case 'basic':
       return `You are GREEN AI in Basic Mode - exceptionally intelligent and knowledgeable with comprehensive understanding across all domains. You provide clear, precise, and insightful answers while maintaining a friendly, conversational tone. ${baseContext}`;
     case 'scary':
-      return `You are GREEN AI in Scary Mode. Go incredibly deep and detailed with your responses! Give comprehensive, thorough answers with extensive analysis and insight. ${baseContext}`;
+      return `You are GREEN AI in Scary Mode. When the user's request calls for it, go incredibly deep and detailed with your responses, with comprehensive, thorough answers and extensive analysis and insight. For simple greetings or quick remarks, still keep it short and casual. ${baseContext}`;
     case 'green':
       return `You are GREEN AI in Green Mode. You're exceptionally helpful and solution-focused! Give practical, wise advice that genuinely helps people. ${baseContext}`;
     case 'humanize':
@@ -237,6 +237,16 @@ const buildUserContext = (userProfile: UserProfile): string => {
   return context;
 };
 
+// Matches short, standalone casual greetings only (e.g. "hi", "hey there", "good morning!").
+// Deliberately anchored to the full trimmed message so it never fires on a greeting
+// that's merely the opening of a longer, substantive message.
+const SIMPLE_GREETING_PATTERN =
+  /^(?:hi+|hey+|hello+|yo+|sup|hiya|howdy|greetings|what'?s up|good\s?(morning|afternoon|evening|night))[\s!.,?]*$/i;
+
+const isSimpleGreeting = (message: string): boolean => {
+  return SIMPLE_GREETING_PATTERN.test(message.trim());
+};
+
 export const sendMessage = async (
   message: string,
   mode: AIMode,
@@ -247,7 +257,7 @@ export const sendMessage = async (
   userProfile?: UserProfile,
   files?: UploadedFile[],
   webSearch: boolean = false
-): Promise<{ text: string; webSearch?: boolean }> => {
+): Promise<{ text: string; webSearch?: boolean; truncated?: boolean }> => {
   try {
     return await processMessage(message, mode, currentModel, conversationId, companionMode, selectedLanguage, userProfile, files, webSearch);
   } catch (error) {
@@ -266,13 +276,13 @@ const processMessage = async (
   userProfile?: UserProfile,
   files?: UploadedFile[],
   webSearch: boolean = false
-): Promise<{ text: string; webSearch?: boolean }> => {
+): Promise<{ text: string; webSearch?: boolean; truncated?: boolean }> => {
   try {
     const cacheKey = `${message}-${mode}-${currentModel}-${companionMode}-${selectedLanguage}-${files?.length || 0}-${webSearch}`;
 
     const cached = responseCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-      return { text: cached.response };
+      return { text: cached.response, truncated: cached.truncated };
     }
 
     if (mode === 'humanize') {
@@ -285,32 +295,50 @@ const processMessage = async (
       return await makeApiCall(gptzeroPrompt, currentModel, conversationId, message, mode, cacheKey, files, false);
     }
 
+    // Simple greetings bypass all memory/context injection entirely so nothing can
+    // drag a "hi" into a long, over-explained response.
+    if (isSimpleGreeting(message)) {
+      const baseSystemPrompt = getModePrompt(companionMode ? 'companion' : mode);
+      const greetingPrompt = `${baseSystemPrompt}\n\nThe user just sent a short, casual greeting. Reply with a brief, warm, casual greeting back - one to two sentences at most. Do not list your capabilities, do not explain what you can help with, do not ask more than one question, do not suggest topics to discuss.\n\nUser: "${message}"`;
+      return await makeApiCall(greetingPrompt, currentModel, conversationId, message, mode, cacheKey, files, false);
+    }
+
+    // Tightened memory-intent patterns: each now requires a personal/temporal
+    // deictic (we/our/my/i) tied closely to an actual recall verb, rather than
+    // matching on any two loosely-related keywords appearing anywhere in the message.
+    // This prevents long, unrelated prompts from accidentally being misread as
+    // "show me the conversation history" just because they happen to contain
+    // words like "tell", "discuss", or "mentioned" somewhere in the text.
     const memoryRequestPatterns = [
-      /(?:show|get|give|tell|list|display|find|search|remember|recall|what).*(conversation|chat|history|record|past|previous|memory|talk|discussion|said|told|mentioned)/i,
-      /(?:conversation|chat|history|record|past|previous|memory|talk|discussion).*(show|get|give|tell|list|display|find|search|remember)/i,
-      /what.*(did|have|was|were).*(we|i).*(talk|discuss|say|chat|mention|conversation)/i,
-      /(?:do you |can you )?remember.*(we|our|my|i|what|when|how)/i,
-      /(?:tell me|show me|remind me).*(about|what|when|how).*(we|our|my|i)/i,
-      /what.*(do you know|did we discuss|have we talked|have i told|did i say|did i mention)/i,
-      /(?:my|our).*(?:last|previous|recent|earlier).*(?:conversation|message|chat|discussion)/i,
-      /what.*(?:was|is).*(?:my|our).*(?:conversation|chat|discussion|message)/i,
-      /(?:earlier|before|previously|last time).*(we|i).*(talked|discussed|said|mentioned)/i
+      /\b(?:do you |can you )?remember\b[\s\S]{0,40}\b(we|our|my|i)\b/i,
+      /\bwhat\s+(?:did|have|was|were)\s+(we|i)\s+(talk(?:ed)?|discuss(?:ed)?|say|said|chat(?:ted)?|mention(?:ed)?)\b/i,
+      /\b(?:tell|show|remind)\s+me\s+(?:again\s+)?(?:about\s+)?(?:what|when|how)\s+(we|our|my|i)\b[\s\S]{0,40}\b(said|talked|discussed|mentioned)\b/i,
+      /\b(?:our|my)\s+(?:last|previous|recent|earlier)\s+(conversation|message|chat|discussion)\b/i,
+      /\b(?:earlier|before|previously|last time)\b[\s\S]{0,40}\b(we|i)\s+(talked|discussed|said|mentioned)\b/i,
+      /\b(?:show|get|give|list|display)\s+me\s+(?:our|my|the)\s+(conversation|chat)\s+(history|record)\b/i
     ];
 
-    const isAskingForRecords     = memoryRequestPatterns.some(pattern => pattern.test(message));
-    const isAskingForLastMessage = /what.*(?:did i say|have i said|was my|did i tell|did i mention).*(?:last|recent|previous|earlier|before)/i.test(message) ||
-                                   /(?:my|our).*(?:last|recent|previous|earlier).*(?:message|conversation|chat|question|statement)/i.test(message) ||
-                                   /what.*(?:was|is).*(?:my|our).*(?:last|recent|previous|earlier)/i.test(message) ||
-                                   /(?:last time|earlier|before|previously).*(i said|i told|i asked|i mentioned)/i.test(message);
-    const isAskingForProfile     = /(?:what do you know|tell me|what have i told you|what do you remember).*(?:about me|about myself|personal)/i.test(message) ||
-                                   /(?:my|our).*(?:profile|information|details|background|personal)/i.test(message) ||
-                                   /(?:who am i|what am i|tell me about myself)/i.test(message);
+    const isAskingForRecords = memoryRequestPatterns.some(pattern => pattern.test(message));
+
+    const isAskingForLastMessage =
+      /\bwhat\s+(?:did i say|have i said|was my|did i tell|did i mention)\b[\s\S]{0,30}\b(last|recent|previous|earlier|before)\b/i.test(message) ||
+      /\b(?:my|our)\s+(?:last|recent|previous|earlier)\s+(message|conversation|chat|question|statement)\b/i.test(message) ||
+      /\bwhat\s+(?:was|is)\s+(?:my|our)\s+(?:last|recent|previous|earlier)\b/i.test(message) ||
+      /\b(?:last time|earlier|before|previously)\b[\s\S]{0,20}\b(i said|i told|i asked|i mentioned)\b/i.test(message);
+
+    const isAskingForProfile =
+      /\b(?:what do you know|tell me|what have i told you|what do you remember)\b[\s\S]{0,20}\b(about me|about myself|my personal)\b/i.test(message) ||
+      /\b(?:my|our)\s+(?:profile|information|details|background)\b/i.test(message) ||
+      /\b(?:who am i|what am i|tell me about myself)\b/i.test(message);
 
     if (isAskingForLastMessage) {
       const lastMessage = getLastUserMessage();
-      return { text: !lastMessage
-        ? "This appears to be our initial interaction. I don't have any previous messages from you in my memory."
-        : `Your most recent message was: "${lastMessage}"` };
+      return {
+        text: !lastMessage
+          ? "This appears to be our initial interaction. I don't have any previous messages from you in my memory."
+          : `Your most recent message was: "${lastMessage}"`,
+        truncated: false
+      };
     }
 
     if (isAskingForProfile) {
@@ -325,13 +353,13 @@ const processMessage = async (
       if (!userProfileData.name && !userProfileData.hobby && !userProfileData.personalInfo) {
         response = "I don't have personal information about you yet. Share details about yourself, and I'll remember them perfectly for our future conversations.";
       }
-      return { text: response };
+      return { text: response, truncated: false };
     }
 
     if (isAskingForRecords) {
       const conversations = getConversationHistory();
       if (conversations.length === 0) {
-        return { text: "This is our first interaction. I don't have any conversation history to recall yet." };
+        return { text: "This is our first interaction. I don't have any conversation history to recall yet.", truncated: false };
       }
 
       const recentConversations = conversations.slice(-10);
@@ -344,16 +372,20 @@ const processMessage = async (
       });
       historyResponse += `I maintain perfect memory of all ${conversations.length} interactions we've had.`;
 
-      responseCache.set(cacheKey, { response: historyResponse, timestamp: Date.now() });
-      return { text: historyResponse };
+      responseCache.set(cacheKey, { response: historyResponse, timestamp: Date.now(), truncated: false });
+      return { text: historyResponse, truncated: false };
     }
 
     const conversationHistory = conversationId ? getConversationHistory(conversationId).slice(-10) : [];
 
-    const isAskingForMoreInfo = /(?:more|tell me more|explain|elaborate|details?|information).*(about|on)/i.test(message) ||
-                               /(?:what|how|why).*(is|are|was|were|does|do|did)/i.test(message) ||
-                               /(?:can you|could you).*(explain|tell|describe)/i.test(message) ||
-                               /(?:remind me|what was|tell me again)/i.test(message);
+    // Tightened: previously matched almost any question in English
+    // (e.g. "how does X work" or "why is Y true"), which pushed ordinary
+    // questions down the memory-search path unnecessarily. Now requires
+    // an explicit ask for more detail/elaboration on something already discussed.
+    const isAskingForMoreInfo =
+      /\b(?:tell me more|explain more|elaborate|go deeper|more details?|more information)\b[\s\S]{0,20}\b(about|on)\b/i.test(message) ||
+      /\b(?:can you|could you)\s+(?:explain|elaborate)\s+(?:that|this|it|more)\b/i.test(message) ||
+      /\b(?:remind me|what was that again|tell me again)\b/i.test(message);
 
     if (isAskingForMoreInfo && conversationHistory.length > 0) {
       const relevantMemories = getRelevantMemories(message, 3);
@@ -372,8 +404,14 @@ const processMessage = async (
       }
     }
 
-    const topicMatch = message.match(/(?:about|regarding|concerning|on)\s+(\w+)/i);
-    if (topicMatch) {
+    // Stopword guard: skip generic filler words ("this", "that", "it", "you", etc.)
+    // so short phrases like "regarding this" don't spawn a spurious topic-memory lookup.
+    const TOPIC_STOPWORDS = new Set([
+      'this', 'that', 'it', 'you', 'me', 'us', 'them', 'him', 'her',
+      'the', 'a', 'an', 'my', 'your', 'our', 'their', 'these', 'those'
+    ]);
+    const topicMatch = message.match(/(?:about|regarding|concerning)\s+(\w{3,})/i);
+    if (topicMatch && !TOPIC_STOPWORDS.has(topicMatch[1].toLowerCase())) {
       const topic         = topicMatch[1].toLowerCase();
       const topicMemories = getMemoriesByTopic(topic, 3);
       if (topicMemories.length > 0) {
@@ -475,7 +513,7 @@ const makeApiCall = async (
   cacheKey: string,
   files?: UploadedFile[],
   webSearch: boolean = false
-): Promise<{ text: string; webSearch?: boolean }> => {
+): Promise<{ text: string; webSearch?: boolean; truncated?: boolean }> => {
   await checkRateLimit();
 
   return retryWithBackoff(async () => {
@@ -503,8 +541,11 @@ const makeApiCall = async (
 
       const aiResponse: string = data.text;
       const usedSearch: boolean = Boolean(data.webSearch);
+      // Set by the edge function when Gemini's finishReason was MAX_TOKENS -
+      // the response is real but was cut off mid-generation, not a complete answer.
+      const wasTruncated: boolean = Boolean(data.truncated);
 
-      responseCache.set(cacheKey, { response: aiResponse, timestamp: Date.now() });
+      responseCache.set(cacheKey, { response: aiResponse, timestamp: Date.now(), truncated: wasTruncated });
 
       if (conversationId) {
         const existingMessages = getConversationHistory(conversationId);
@@ -512,11 +553,32 @@ const makeApiCall = async (
         saveConversationMessage(conversationId, originalMessage, aiResponse, mode, messageIndex);
       }
 
-      return { text: aiResponse, webSearch: usedSearch };
+      return { text: aiResponse, webSearch: usedSearch, truncated: wasTruncated };
     } catch (error) {
       console.error('Error in makeApiCall:', error);
       if (error instanceof Error) throw error;
       throw new Error('Failed to communicate with GREEN AI.');
     }
   }, 3, 3000);
+};
+
+// Continues a response that was cut off by the token ceiling. Feeds the
+// original prompt back in along with what was already generated, and asks
+// the model to pick up exactly where it left off rather than restarting or
+// summarizing. The caller is expected to append the returned text onto the
+// existing message rather than replacing it.
+export const continueTruncatedResponse = async (
+  originalMessage: string,
+  partialResponse: string,
+  mode: AIMode,
+  currentModel: string,
+  conversationId?: string,
+  companionMode: boolean = false,
+  selectedLanguage: string = 'English'
+): Promise<{ text: string; webSearch?: boolean; truncated?: boolean }> => {
+  const systemPrompt = getModePrompt(companionMode ? 'companion' : mode);
+  const continuePrompt = `${systemPrompt}\n\nYou were previously answering this message and got cut off partway through:\n\nOriginal message: "${originalMessage}"\n\nYour response so far (incomplete):\n"""\n${partialResponse}\n"""\n\nContinue the response exactly where it left off. Do not repeat what was already said, do not restart, do not summarize - just continue the text naturally from the exact cutoff point.`;
+
+  const cacheKey = `continue-${originalMessage}-${partialResponse.length}-${mode}-${currentModel}`;
+  return await makeApiCall(continuePrompt, currentModel, conversationId, originalMessage, mode, cacheKey, undefined, false);
 };
