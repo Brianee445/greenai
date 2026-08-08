@@ -44,6 +44,13 @@ function getGeminiModelName(internalModel: string): string {
   return MODEL_MAP[internalModel] || "gemini-2.5-flash";
 }
 
+// NOTE: 8192 is a conservative default. Some Gemini model families support far
+// higher output token ceilings — check the current limit for whichever model
+// each MODEL_MAP entry points to on Google's model reference page, since a low
+// ceiling here will silently truncate long responses (surfaced below via
+// finishReason === "MAX_TOKENS" so at least it's no longer silent).
+const MAX_OUTPUT_TOKENS = Number(Deno.env.get("GEMINI_MAX_OUTPUT_TOKENS")) || 8192;
+
 Deno.serve(async (req: Request) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -127,7 +134,7 @@ Deno.serve(async (req: Request) => {
         temperature: 0.7,
         topK: 50,
         topP: 0.98,
-        maxOutputTokens: 8192,
+        maxOutputTokens: MAX_OUTPUT_TOKENS,
       },
     };
 
@@ -164,8 +171,60 @@ Deno.serve(async (req: Request) => {
 
     const data = await geminiResponse.json();
 
+    // The prompt itself can be blocked before any generation happens
+    // (e.g. safety filters on the input). This has a totally different
+    // shape from a normal response — no candidates array at all — and
+    // was previously falling through to a generic "invalid format" error.
+    if (data?.promptFeedback?.blockReason) {
+      console.error("Prompt blocked by Gemini:", data.promptFeedback);
+      return new Response(
+        JSON.stringify({
+          error:
+            `Your message was blocked by the model's safety filters (${data.promptFeedback.blockReason}). Please rephrase and try again.`,
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     const candidate = data?.candidates?.[0];
-    const text = candidate?.content?.parts?.[0]?.text;
+
+    // A candidate can stop for reasons other than finishing normally.
+    // SAFETY / RECITATION mean content was withheld, often with empty parts.
+    // MAX_TOKENS means the response was cut off mid-generation — that's the
+    // main "long responses don't come through" failure mode, and previously
+    // this was completely silent.
+    const finishReason = candidate?.finishReason;
+
+    if (finishReason === "SAFETY" || finishReason === "RECITATION") {
+      console.error("Gemini withheld content:", finishReason, data);
+      return new Response(
+        JSON.stringify({
+          error:
+            finishReason === "SAFETY"
+              ? "The response was blocked by safety filters. Try rephrasing your request."
+              : "The response was blocked due to a recitation concern. Try rephrasing your request.",
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    // Concatenate ALL text parts, not just the first one. Gemini can split
+    // a single response across multiple `parts` entries — this was the
+    // actual cause of long responses appearing truncated, since only
+    // parts[0].text was ever being read before.
+    const textParts = candidate?.content?.parts
+      ?.map((part: Record<string, unknown>) =>
+        typeof part.text === "string" ? part.text : ""
+      )
+      .filter(Boolean);
+
+    const text = textParts && textParts.length > 0 ? textParts.join("") : undefined;
 
     if (!text) {
       console.error("Invalid Gemini response shape:", data);
@@ -182,8 +241,18 @@ Deno.serve(async (req: Request) => {
       webSearch && candidate?.groundingMetadata?.webSearchQueries?.length,
     );
 
+    // Let the client know the response was cut off by the token ceiling
+    // rather than finishing naturally, so it can be surfaced to the user
+    // or used to trigger a "continue" follow-up instead of pretending the
+    // answer is complete.
+    const truncated = finishReason === "MAX_TOKENS";
+
     return new Response(
-      JSON.stringify({ text, webSearch: usedSearch || webSearch }),
+      JSON.stringify({
+        text,
+        webSearch: usedSearch || webSearch,
+        truncated,
+      }),
       {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
