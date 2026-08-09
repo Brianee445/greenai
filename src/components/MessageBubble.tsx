@@ -77,8 +77,11 @@ const AIAvatar = () => (
   </div>
 );
 
+// User avatar placeholder, now on the same green gradient as the rest of the
+// app's identity (was a flat bg-indigo-500 circle). Falls back to "U" when
+// no profile name is set, same as before.
 const UserAvatar = ({ name }: { name: string }) => (
-  <div className="w-[30px] h-[30px] rounded-full bg-indigo-500 flex items-center justify-center flex-shrink-0 mt-0.5 text-white text-xs font-medium">
+  <div className="w-[30px] h-[30px] rounded-full bg-gradient-green flex items-center justify-center flex-shrink-0 mt-0.5 text-white text-xs font-medium shadow-sm">
     {name?.[0]?.toUpperCase() ?? 'U'}
   </div>
 );
