@@ -54,26 +54,36 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   return (
     // Outer wrapper reserves breathing room (p-2/p-3) so the glow in
     // .gradient-glow-frame isn't clipped by the parent's edges or the
-    // sidebar/header. Inner element carries the actual rounded frame,
-    // the animated gradient ring, and the scrollable message list.
+    // sidebar/header.
+    //
+    // .gradient-glow-frame carries the gradient itself as a real
+    // background + 1px padding (NOT a mask-composite trick — that
+    // technique silently fails on some Chrome/WebView builds and
+    // renders as a solid fill instead of a ring, which is the bug
+    // we hit). The 1px padding reveals a thin gradient edge.
+    //
+    // .gradient-glow-inner sits on top with the solid app background
+    // and handles scrolling, covering everything except that 1px ring.
     <div className="flex-1 overflow-hidden p-2 sm:p-3">
-      <div
-        className="gradient-glow-frame h-full rounded-3xl overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-transparent"
-        style={{ backgroundColor: darkMode ? '#212121' : '#ffffff' }}
-      >
-        {messages.map((message) => (
-          <MessageBubble 
-            key={message.id} 
-            message={message} 
-            darkMode={darkMode} 
-            userProfile={userProfile}
-            onReaction={onMessageReaction}
-          />
-        ))}
-        
-        {isTyping && <TypingIndicator darkMode={darkMode} />}
-        
-        <div ref={messagesEndRef} className="h-4" />
+      <div className="gradient-glow-frame h-full rounded-3xl">
+        <div
+          className="gradient-glow-inner h-full rounded-3xl overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-transparent"
+          style={{ backgroundColor: darkMode ? '#212121' : '#ffffff' }}
+        >
+          {messages.map((message) => (
+            <MessageBubble 
+              key={message.id} 
+              message={message} 
+              darkMode={darkMode} 
+              userProfile={userProfile}
+              onReaction={onMessageReaction}
+            />
+          ))}
+          
+          {isTyping && <TypingIndicator darkMode={darkMode} />}
+          
+          <div ref={messagesEndRef} className="h-4" />
+        </div>
       </div>
     </div>
   );
