@@ -185,10 +185,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           return (
                             <div
                               key={conversation.id}
-                              className="relative flex items-center rounded-lg cursor-pointer group"
+                              className={`relative flex items-center rounded-lg cursor-pointer group ${
+                                isActive ? 'bg-gradient-green-soft' : ''
+                              }`}
                               style={{
                                 backgroundColor: isActive 
-                                  ? (darkMode ? '#2f2f2f' : '#f3f4f6') 
+                                  ? undefined 
                                   : isHovered 
                                     ? (darkMode ? '#212121' : '#f9fafb') 
                                     : 'transparent',
