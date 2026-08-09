@@ -177,6 +177,13 @@ body {
     background: var(--gradient-green);
   }
 
+  /* Soft/translucent gradient fill: e.g. active list rows, subtle badges,
+     icon backdrops. Previously only defined as a CSS variable with no
+     class exposing it — nothing in the app could actually apply it. */
+  .bg-gradient-green-soft {
+    background: var(--gradient-green-soft);
+  }
+
   /* Gradient ring/border overlay: e.g. input box focus state.
      Requires the parent to have position: relative and a border-radius,
      which .ring-gradient-green inherits via border-radius: inherit. */
@@ -195,6 +202,26 @@ body {
     mask-composite: exclude;
     pointer-events: none;
     transition: opacity 0.2s ease;
+  }
+  /* The actual "glow": a blurred halo behind the box, faded in on focus.
+     Without this, .ring-gradient-green was only ever a flat outline — the
+     ::before above draws the crisp border, this ::after adds the soft
+     bloom around it. z-index: -1 keeps it behind the input's own
+     background so it reads as ambient light, not a border. */
+  @keyframes ring-glow-in {
+    from { opacity: 0; }
+    to   { opacity: 0.45; }
+  }
+  .ring-gradient-green::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: inherit;
+    background: var(--gradient-green);
+    filter: blur(16px);
+    z-index: -1;
+    pointer-events: none;
+    animation: ring-glow-in 0.25s ease forwards;
   }
 
   /* Animated glow: e.g. active "generating" / stop button state */
