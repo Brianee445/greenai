@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
@@ -70,6 +70,13 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
+
+  // Tracks the in-flight request so "stop" can discard a response that
+  // arrives after the user has already cancelled. The Gemini call isn't
+  // streamed, so this can't abort the network request mid-flight — instead
+  // it marks the request stale so its result is dropped on arrival, and
+  // immediately restores the UI to its idle state.
+  const activeRequestIdRef = useRef<number | null>(null);
 
   const handleAuthRequired = useCallback((feature: string) => {
     const messages: Record<string, { title: string; description: string }> = {
@@ -146,11 +153,17 @@ export default function App() {
       }
     }
 
+    // Mark this as the active request. If the user hits "stop" before this
+    // resolves, activeRequestIdRef will no longer match and the response
+    // gets discarded further down.
+    const requestId = Date.now();
+    activeRequestIdRef.current = requestId;
+
     setIsProcessing(true);
     setIsTyping(true);
 
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: requestId.toString(),
       text: text + (files && files.length > 0 ? ` [${files.length} file(s) attached]` : ''),
       sender: 'user',
       timestamp: Date.now(),
@@ -173,6 +186,10 @@ export default function App() {
         webSearch ?? false
       );
 
+      // If the user cancelled while this was in flight, don't append a
+      // response to a conversation that's already moved on.
+      if (activeRequestIdRef.current !== requestId) return;
+
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
         text: response.text,
@@ -188,6 +205,8 @@ export default function App() {
         recordUsage('chat_message', { model: settings.currentModel, mode: settings.currentMode }).catch(() => {});
       }
     } catch (error) {
+      if (activeRequestIdRef.current !== requestId) return;
+
       console.error('Error sending message:', error);
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -198,10 +217,21 @@ export default function App() {
       };
       setMessages([...newMessages, errorMessage]);
     } finally {
-      setIsProcessing(false);
-      setIsTyping(false);
+      if (activeRequestIdRef.current === requestId) {
+        setIsProcessing(false);
+        setIsTyping(false);
+      }
     }
   };
+
+  // Called from the ChatInput stop button. Immediately restores the idle UI
+  // and invalidates the in-flight request so its eventual response (success
+  // or error) is silently dropped instead of being appended late.
+  const handleStopGeneration = useCallback(() => {
+    activeRequestIdRef.current = null;
+    setIsProcessing(false);
+    setIsTyping(false);
+  }, []);
 
   const handleMessageReaction = (messageId: string, reaction: 'like' | 'dislike') => {
     setMessages(prev =>
@@ -270,6 +300,7 @@ export default function App() {
         onNewConversation={handleNewChat}
         darkMode={settings.darkMode}
         userEmail={user?.email ?? ''}
+        userName={settings.userProfile?.name}
         isAuthenticated={isAuthenticated}
         onSignOut={signOut}
       />
@@ -327,6 +358,7 @@ export default function App() {
           <div className="max-w-3xl mx-auto">
             <ChatInput
               onSendMessage={(message, files, webSearch) => handleSendMessage(message, files, webSearch)}
+              onStopGeneration={handleStopGeneration}
               disabled={isProcessing}
               placeholder="Message GREEN AI"
               darkMode={settings.darkMode}
