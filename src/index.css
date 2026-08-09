@@ -4,7 +4,7 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=SF+Pro+Display:wght@300;400;500;600;700;800&family=Poppins:wght@300;400;500;600;700;800&display=swap');
 
-/* ─── BASE & LAYOUT LOCK ─── */
+/* FIX 1: Lock the body to prevent the "unbalanced" shift and pull-to-refresh bounce */
 html, body, #root {
   height: 100dvh;
   overflow: hidden;
@@ -24,82 +24,69 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ─── UTILITY LAYER ─── */
 @layer utilities {
-  /* Scrollbars */
   .scrollbar-thin {
     scrollbar-width: thin;
   }
+  
   .scrollbar-thumb-gray-400 {
     scrollbar-color: #9ca3af transparent;
   }
+  
   .scrollbar-track-transparent {
     scrollbar-color: #9ca3af transparent;
   }
+  
   .scrollbar-thin::-webkit-scrollbar {
     width: 6px; 
     height: 6px;
   }
+  
   .scrollbar-thin::-webkit-scrollbar-track {
     background: transparent;
   }
+  
   .scrollbar-thin::-webkit-scrollbar-thumb {
     background-color: #9ca3af;
     border-radius: 3px; 
   }
+  
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
     background-color: #6b7280;
   }
 
-  /* Typography & touch */
   .text-crisp {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
   }
+  
   .touch-manipulation {
     touch-action: manipulation;
   }
+  
   .focus-visible:focus {
     outline: 2px solid #10b981;
     outline-offset: 2px;
   }
-
-  /* Viewport */
+  
+  /* FIX 2: Better mobile viewport handling using modern CSS units */
   .h-screen {
-    height: 100dvh;
+    height: 100dvh; /* Best for Chrome 2026 */
   }
 
-  /* ─── CHAT LAYOUT ─── */
-  .chat-app {
-    display: flex;
-    flex-direction: column;
-    height: 100dvh;
-    overflow: hidden;
-  }
-  .chat-header {
-    flex-shrink: 0;
-  }
-  .chat-messages {
-    flex: 1;
-    overflow-y: auto;
-    min-height: 0;
-    -webkit-overflow-scrolling: touch;
-  }
-  .chat-input {
-    flex-shrink: 0;
-  }
-
+  /* FIX 3: Ensure the chat area is the only thing that scrolls */
   .chat-scroll-container {
     overflow-y: auto;
     height: 100%;
-    -webkit-overflow-scrolling: touch;
+    -webkit-overflow-scrolling: touch; /* Smooth momentum scrolling for iOS/Chrome */
   }
-
+  
   html {
     scroll-behavior: smooth;
   }
+  
 
   @media screen and (max-width: 768px) {
     input[type="text"],
@@ -107,11 +94,10 @@ body {
     input[type="password"],
     textarea,
     select {
-      font-size: 16px !important;
+      font-size: 16px !important; /* Forces 16px on mobile to prevent Chrome's auto-zoom on focus */
     }
   }
-
-  /* Message styling */
+  
   .message-text {
     font-family: 'Poppins', 'SF Pro Display', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
     font-weight: 500;
@@ -119,6 +105,7 @@ body {
     letter-spacing: 0.02em;
     font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
   }
+  
   .message-content {
     line-height: 1.7;
     font-weight: 500;
@@ -126,6 +113,7 @@ body {
     word-wrap: break-word;
     overflow-wrap: break-word;
   }
+  
   .message-content h3 {
     font-weight: 700;
     font-size: 1.1em;
@@ -134,15 +122,19 @@ body {
     margin-top: 1rem;
     color: #10b981;
   }
+  
   .message-content h3:first-child {
     margin-top: 0;
   }
+  
   .message-content > div {
     margin-bottom: 0.5rem;
   }
+  
   .message-content > div:last-child {
     margin-bottom: 0;
   }
+  
   .enhanced-text {
     font-family: 'Poppins', 'SF Pro Display', 'Inter', system-ui, sans-serif;
     font-weight: 500;
@@ -152,6 +144,7 @@ body {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+  
   .beautiful-header {
     font-family: 'Poppins', system-ui, sans-serif;
     font-weight: 700;
@@ -160,25 +153,51 @@ body {
   }
 }
 
-/* ─── GREEN GRADIENT SYSTEM ─── */
+/* ── Green gradient system (Gemini-style accent, recolored to this app's emerald palette) ──
+   Widened from the original 3-stop emerald-only range (which read as flat at
+   small sizes) to a mint → emerald → deep forest spread, so the gradient is
+   visibly a gradient rather than a slightly-shaded solid color. */
 @layer utilities {
   :root {
-    --gradient-green: linear-gradient(135deg, #6ee7b7 0%, #34d399 25%, #10b981 50%, #059669 75%, #047857 100%);
-    --gradient-green-soft: linear-gradient(135deg, rgba(110,231,183,0.18) 0%, rgba(16,185,129,0.18) 50%, rgba(4,120,87,0.18) 100%);
+    --gradient-green: linear-gradient(135deg, #5eead4 0%, #34d399 25%, #10b981 50%, #059669 75%, #065f46 100%);
+    --gradient-green-soft: linear-gradient(135deg, rgba(94,234,212,0.18) 0%, rgba(16,185,129,0.18) 50%, rgba(6,95,70,0.18) 100%);
   }
 
+  /* Text: e.g. logo wordmark, headings */
   .text-gradient-green {
     background: var(--gradient-green);
-    -webkit-background-clip: text;
     background-clip: text;
-    color: transparent;
+    -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+    color: transparent;
   }
 
+  /* Solid gradient fill: e.g. avatar badges, active buttons */
   .bg-gradient-green {
     background: var(--gradient-green);
   }
 
+  /* Gradient ring/border overlay: e.g. input box focus state.
+     Requires the parent to have position: relative and a border-radius,
+     which .ring-gradient-green inherits via border-radius: inherit. */
+  .ring-gradient-green {
+    position: relative;
+  }
+  .ring-gradient-green::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    padding: 2px;
+    background: var(--gradient-green);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+
+  /* Animated glow: e.g. active "generating" / stop button state */
   @keyframes gradient-pulse {
     0%, 100% { opacity: 0.75; }
     50%      { opacity: 1; }
@@ -188,73 +207,51 @@ body {
     animation: gradient-pulse 1.6s ease-in-out infinite;
   }
 
+  /* Slow-shifting animated gradient background: e.g. thinking/loading state */
   @keyframes gradient-shift {
     0%   { background-position: 0% 50%; }
     50%  { background-position: 100% 50%; }
     100% { background-position: 0% 50%; }
   }
   .gradient-shimmer-green {
-    background: linear-gradient(270deg, #6ee7b7, #34d399, #10b981, #059669, #047857, #059669, #10b981, #34d399, #6ee7b7);
+    background: linear-gradient(270deg, #5eead4, #34d399, #10b981, #059669, #10b981, #34d399, #5eead4);
     background-size: 400% 400%;
     animation: gradient-shift 3s ease infinite;
   }
 
-  /*
-   * Glow-ring frame — rebuilt without mask-composite (that approach
-   * rendered as a solid green fill on Android Chrome/WebView instead
-   * of a thin ring, since -webkit-mask-composite: xor isn't reliably
-   * supported there).
-   *
-   * How it works now: the OUTER element (.gradient-glow-frame) has
-   * the animated gradient as its literal background, plus 1px of
-   * padding. The INNER element (.gradient-glow-inner) sits on top
-   * with a solid opaque background, covering everything except that
-   * 1px edge — which is what shows as the thin gradient ring.
-   */
+  /* Ambient glowing rounded frame — a persistent, slowly animated gradient
+     ring plus a soft blurred halo behind it, closer to Gemini's ambient
+     glow around its main surfaces. Apply to a container that already has
+     position set (or let this set it) and a border-radius; the ring and
+     glow both pick up that radius via `inherit`. */
   .gradient-glow-frame {
     position: relative;
     z-index: 0;
-    background: linear-gradient(
-      120deg,
-      #a7f3d0,
-      #6ee7b7,
-      #34d399,
-      #10b981,
-      #6ee7b7,
-      #a7f3d0
-    );
-    background-size: 300% 300%;
-    animation: gradient-shift 10s ease infinite;
-    padding: 1px;
   }
-
+  .gradient-glow-frame::before {
+    content: '';
+    position: absolute;
+    inset: -1.5px;
+    border-radius: inherit;
+    padding: 1.5px;
+    background: linear-gradient(135deg, #5eead4, #34d399, #10b981, #059669, #10b981, #34d399, #5eead4);
+    background-size: 300% 300%;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    animation: gradient-shift 8s ease infinite;
+  }
   .gradient-glow-frame::after {
     content: '';
     position: absolute;
-    inset: -14px;
+    inset: -10px;
     border-radius: inherit;
-    background: linear-gradient(
-      120deg,
-      rgba(167, 243, 208, 0.4),
-      rgba(52, 211, 153, 0.3),
-      rgba(16, 185, 129, 0.4)
-    );
-    background-size: 300% 300%;
-    filter: blur(22px);
-    opacity: 0.28;
+    background: var(--gradient-green);
+    filter: blur(24px);
+    opacity: 0.22;
     z-index: -1;
     pointer-events: none;
-    animation: gradient-shift 10s ease infinite;
-  }
-
-  .gradient-glow-inner {
-    border-radius: inherit;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .gradient-glow-frame,
-    .gradient-glow-frame::after {
-      animation: none;
-    }
+    animation: gradient-pulse 4s ease-in-out infinite;
   }
 }
