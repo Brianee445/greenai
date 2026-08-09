@@ -18,6 +18,9 @@ export interface UploadedFile {
 
 interface ChatInputProps {
   onSendMessage: (message: string, files?: UploadedFile[], webSearch?: boolean) => void;
+  // Called when the user taps the stop button while a response is generating.
+  // Optional so ChatInput still works untouched in places that don't wire it up yet.
+  onStopGeneration?: () => void;
   disabled: boolean;
   placeholder?: string;
   darkMode: boolean;
@@ -26,6 +29,7 @@ interface ChatInputProps {
 
 export const ChatInput: React.FC<ChatInputProps> = ({
   onSendMessage,
+  onStopGeneration,
   disabled,
   placeholder = 'Message GREEN AI',
   darkMode,
@@ -36,6 +40,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [isProcessingFiles, setIsProcessingFiles] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
 
   const textareaRef      = useRef<HTMLTextAreaElement>(null);
   const fileInputRef     = useRef<HTMLInputElement>(null);
@@ -43,12 +48,13 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef   = useRef<Blob[]>([]);
 
-  // Auto-resize textarea
+  // Auto-resize textarea. Max height raised from 200px to 320px so the box
+  // scales further with longer messages before it starts internally scrolling.
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 320)}px`;
   }, [message]);
 
   // ───────── FILE READERS ─────────
@@ -231,11 +237,23 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const canSend = (message.trim() || uploadedFiles.length > 0) && !isProcessingFiles;
 
+  // While disabled=true, the parent is generating a response, so the
+  // send button becomes an active stop button instead of being inert.
+  const isGenerating = disabled;
+
   const handleSubmit = () => {
     if (!canSend || disabled) return;
     onSendMessage(message.trim(), uploadedFiles.length ? uploadedFiles : undefined, webSearchEnabled);
     setMessage('');
     setUploadedFiles([]);
+  };
+
+  const handleSendOrStop = () => {
+    if (isGenerating) {
+      onStopGeneration?.();
+    } else {
+      handleSubmit();
+    }
   };
 
   // ───────── THEME ─────────
@@ -282,8 +300,10 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   return (
     <div className="w-full px-4 pb-4">
       <div
-        className="max-w-3xl mx-auto rounded-2xl border"
-        style={{ backgroundColor: bg, borderColor: border }}
+        className={`max-w-3xl mx-auto rounded-2xl border transition-all duration-200 ${
+          isFocused ? 'ring-gradient-green' : ''
+        }`}
+        style={{ backgroundColor: bg, borderColor: isFocused ? 'transparent' : border }}
       >
         {uploadedFiles.length > 0 && (
           <div className="flex flex-wrap gap-2 px-3 pt-3">
@@ -317,15 +337,17 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             ref={textareaRef}
             value={message}
             onChange={e => setMessage(e.target.value)}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
             placeholder={isProcessingFiles ? 'Processing files…' : placeholder}
             disabled={disabled || isProcessingFiles}
             rows={1}
-            className="w-full resize-none outline-none text-sm leading-relaxed"
+            className="w-full resize-none outline-none text-sm sm:text-[15px] leading-relaxed transition-[height] duration-100"
             style={{
               background:  'transparent',
               color:       textColor,
               minHeight:   '28px',
-              maxHeight:   '200px',
+              maxHeight:   '320px',
             }}
             onKeyDown={e => {
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -415,15 +437,23 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             </button>
           </div>
 
+          {/* Send / Stop button.
+              While generating, this is a real stop control: it's enabled and
+              clickable (previously it was just a Square icon glued to a
+              disabled button), styled with the animated green gradient so
+              it visibly reads as "active" rather than greyed out. */}
           <button
             type="button"
-            onClick={handleSubmit}
-            disabled={!canSend || disabled}
-            className="flex items-center justify-center w-8 h-8 rounded-full transition-colors duration-150"
-            style={{ backgroundColor: sendBg }}
+            onClick={handleSendOrStop}
+            disabled={isGenerating ? false : !canSend}
+            title={isGenerating ? 'Stop generating' : 'Send message'}
+            className={`flex items-center justify-center w-8 h-8 rounded-full transition-all duration-150 ${
+              isGenerating ? 'gradient-glow-active' : ''
+            }`}
+            style={{ backgroundColor: isGenerating ? undefined : sendBg }}
           >
-            {disabled ? (
-              <Square size={13} fill={sendColor} style={{ color: sendColor }} />
+            {isGenerating ? (
+              <Square size={13} fill="#ffffff" style={{ color: '#ffffff' }} />
             ) : (
               <ArrowUp size={16} style={{ color: sendColor }} />
             )}
