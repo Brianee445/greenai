@@ -70,8 +70,8 @@ ${text.replace(/\n/g, '<br>')}
 };
 
 const AIAvatar = () => (
-  <div className="w-[30px] h-[30px] rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0 mt-0.5">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
+  <div className="w-[30px] h-[30px] rounded-full bg-gradient-green-soft flex items-center justify-center flex-shrink-0 mt-0.5">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round">
       <path d="M12 2L12 22M2 12L22 12" />
     </svg>
   </div>

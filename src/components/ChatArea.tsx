@@ -34,8 +34,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       <div className="flex-1 flex items-center justify-center overflow-y-auto">
         <div className="text-center max-w-sm sm:max-w-md w-full">
           <div className="mb-6">
-            <div className="relative mx-auto mb-4 w-12 h-12 sm:w-16 sm:h-16">
-              <Leaf className="w-16 h-16 text-emerald-500 drop-shadow-lg" />
+            <div className="relative mx-auto mb-4 w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-gradient-green-soft flex items-center justify-center">
+              <Leaf className="w-7 h-7 sm:w-9 sm:h-9 text-emerald-500 drop-shadow-lg" />
             </div>
             <h2 className={`text-base sm:text-lg lg:text-xl font-bold ${
               darkMode ? 'text-white' : 'text-gray-900'
