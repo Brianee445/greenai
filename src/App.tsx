@@ -4,7 +4,6 @@ import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
 import { ChatInput } from './components/ChatInput';
 import { SettingsModal } from './components/SettingsModal';
-import { MobileAppBanner } from './components/MobileAppBanner';
 import { useChatStorage } from './hooks/useChatStorage';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import { useAuth } from './auth/hooks/useAuth';
@@ -282,9 +281,6 @@ export default function App() {
       className="h-screen flex overflow-hidden"
       style={{ backgroundColor: settings.darkMode ? '#212121' : '#ffffff' }}
     >
-      {/* ── Mobile app download banner ── */}
-      <MobileAppBanner darkMode={settings.darkMode} />
-
       {/* ── Sidebar ── */}
       <Sidebar
         isOpen={isSidebarOpen}
@@ -352,7 +348,7 @@ export default function App() {
 
         {/* ── Input bar — pinned to bottom, centred, max-width like ChatGPT ── */}
         <div
-          className="w-full px-4 pb-4 pt-2"
+          className="w-full px-6 pb-4 pt-6"
           style={{
             background: settings.darkMode
               ? 'linear-gradient(to top, #212121 80%, transparent)'

@@ -203,25 +203,29 @@ body {
     pointer-events: none;
     transition: opacity 0.2s ease;
   }
-  /* The actual "glow": a blurred halo behind the box, faded in on focus.
-     Without this, .ring-gradient-green was only ever a flat outline — the
-     ::before above draws the crisp border, this ::after adds the soft
-     bloom around it. z-index: -1 keeps it behind the input's own
-     background so it reads as ambient light, not a border. */
+  /* The actual "glow": a blurred, rotating halo behind the box, faded in
+     on focus. Without this, .ring-gradient-green was only ever a flat
+     outline — the ::before above draws the crisp border, this ::after
+     adds the soft bloom, and the conic gradient + spin animation make the
+     light appear to circulate around the box rather than sit static. */
   @keyframes ring-glow-in {
     from { opacity: 0; }
-    to   { opacity: 0.45; }
+    to   { opacity: 0.65; }
+  }
+  @keyframes ring-glow-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
   }
   .ring-gradient-green::after {
     content: '';
     position: absolute;
-    inset: -8px;
+    inset: -18px;
     border-radius: inherit;
-    background: var(--gradient-green);
-    filter: blur(16px);
+    background: conic-gradient(from 0deg, #5eead4, #34d399, #10b981, #059669, #065f46, #059669, #10b981, #34d399, #5eead4);
+    filter: blur(22px);
     z-index: -1;
     pointer-events: none;
-    animation: ring-glow-in 0.25s ease forwards;
+    animation: ring-glow-in 0.25s ease forwards, ring-glow-spin 4s linear infinite;
   }
 
   /* Animated glow: e.g. active "generating" / stop button state */
