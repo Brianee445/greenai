@@ -1,257 +1,662 @@
+/* =========================================================
+   GOOGLE FONTS
+   IMPORTANT: @import must come BEFORE Tailwind directives.
+   ========================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@300;400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=SF+Pro+Display:wght@300;400;500;600;700;800&family=Poppins:wght@300;400;500;600;700;800&display=swap');
 
-/* FIX 1: Lock the body to prevent the "unbalanced" shift and pull-to-refresh bounce */
-html, body, #root {
+/* =========================================================
+   GLOBAL / MOBILE VIEWPORT
+   ========================================================= */
+
+html,
+body,
+#root {
   height: 100dvh;
+  width: 100%;
   overflow: hidden;
   overscroll-behavior-y: none;
-  width: 100%;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  font-family: 'Poppins', 'SF Pro Display', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-  font-size: 0.875rem; 
+  margin: 0;
+
+  font-family:
+    'Poppins',
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    system-ui,
+    sans-serif;
+
+  font-size: 0.875rem;
+
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
+
   touch-action: manipulation;
-  font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
+
+  font-feature-settings:
+    'kern' 1,
+    'liga' 1,
+    'calt' 1;
+
   text-rendering: optimizeLegibility;
+
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+
+/* =========================================================
+   CUSTOM UTILITIES
+   ========================================================= */
+
 @layer utilities {
+
+  /* -------------------------------------------------------
+     Scrollbar
+     ------------------------------------------------------- */
+
   .scrollbar-thin {
     scrollbar-width: thin;
   }
-  
+
   .scrollbar-thumb-gray-400 {
     scrollbar-color: #9ca3af transparent;
   }
-  
+
   .scrollbar-track-transparent {
     scrollbar-color: #9ca3af transparent;
   }
-  
+
   .scrollbar-thin::-webkit-scrollbar {
-    width: 6px; 
+    width: 6px;
     height: 6px;
   }
-  
+
   .scrollbar-thin::-webkit-scrollbar-track {
     background: transparent;
   }
-  
+
   .scrollbar-thin::-webkit-scrollbar-thumb {
     background-color: #9ca3af;
-    border-radius: 3px; 
+    border-radius: 3px;
   }
-  
+
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
     background-color: #6b7280;
   }
 
+
+  /* -------------------------------------------------------
+     Crisp text
+     ------------------------------------------------------- */
+
   .text-crisp {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+
     text-rendering: optimizeLegibility;
-    font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
+
+    font-feature-settings:
+      'kern' 1,
+      'liga' 1,
+      'calt' 1;
   }
-  
+
+
+  /* -------------------------------------------------------
+     Touch
+     ------------------------------------------------------- */
+
   .touch-manipulation {
     touch-action: manipulation;
   }
-  
+
+
+  /* -------------------------------------------------------
+     Focus
+     ------------------------------------------------------- */
+
   .focus-visible:focus {
     outline: 2px solid #10b981;
     outline-offset: 2px;
   }
-  
-  /* FIX 2: Better mobile viewport handling using modern CSS units */
+
+
+  /* -------------------------------------------------------
+     Mobile viewport
+     ------------------------------------------------------- */
+
   .h-screen {
-    height: 100dvh; /* Best for Chrome 2026 */
+    height: 100dvh;
   }
 
-  /* FIX 3: Ensure the chat area is the only thing that scrolls */
+
+  /* -------------------------------------------------------
+     Chat scroll container
+     ------------------------------------------------------- */
+
   .chat-scroll-container {
     overflow-y: auto;
     height: 100%;
-    -webkit-overflow-scrolling: touch; /* Smooth momentum scrolling for iOS/Chrome */
-  }
-  
-  html {
-    scroll-behavior: smooth;
-  }
-  
 
-  @media screen and (max-width: 768px) {
-    input[type="text"],
-    input[type="email"],
-    input[type="password"],
-    textarea,
-    select {
-      font-size: 16px !important; /* Forces 16px on mobile to prevent Chrome's auto-zoom on focus */
-    }
+    -webkit-overflow-scrolling: touch;
+
+    overscroll-behavior-y: contain;
   }
-  
+
+
+  /* -------------------------------------------------------
+     Message typography
+     ------------------------------------------------------- */
+
   .message-text {
-    font-family: 'Poppins', 'SF Pro Display', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-family:
+      'Poppins',
+      'Inter',
+      -apple-system,
+      BlinkMacSystemFont,
+      'Segoe UI',
+      system-ui,
+      sans-serif;
+
     font-weight: 500;
-    line-height: 1.7; 
+
+    line-height: 1.7;
+
     letter-spacing: 0.02em;
-    font-feature-settings: 'kern' 1, 'liga' 1, 'calt' 1;
+
+    font-feature-settings:
+      'kern' 1,
+      'liga' 1,
+      'calt' 1;
   }
-  
+
+
   .message-content {
     line-height: 1.7;
+
     font-weight: 500;
+
     letter-spacing: 0.01em;
+
     word-wrap: break-word;
     overflow-wrap: break-word;
+
+    max-width: 100%;
   }
-  
+
+
   .message-content h3 {
     font-weight: 700;
+
     font-size: 1.1em;
+
     letter-spacing: 0.02em;
-    margin-bottom: 0.5rem;
+
     margin-top: 1rem;
-    color: #10b981;
+    margin-bottom: 0.5rem;
+
+    color: #047857;
   }
-  
+
+
   .message-content h3:first-child {
     margin-top: 0;
   }
-  
+
+
   .message-content > div {
     margin-bottom: 0.5rem;
   }
-  
+
+
   .message-content > div:last-child {
     margin-bottom: 0;
   }
-  
+
+
+  /* -------------------------------------------------------
+     Enhanced text
+     ------------------------------------------------------- */
+
   .enhanced-text {
-    font-family: 'Poppins', 'SF Pro Display', 'Inter', system-ui, sans-serif;
+    font-family:
+      'Poppins',
+      'Inter',
+      system-ui,
+      sans-serif;
+
     font-weight: 500;
+
     line-height: 1.8;
+
     letter-spacing: 0.015em;
+
     text-rendering: optimizeLegibility;
+
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-  
+
+
+  /* -------------------------------------------------------
+     Header
+     ------------------------------------------------------- */
+
   .beautiful-header {
-    font-family: 'Poppins', system-ui, sans-serif;
+    font-family:
+      'Poppins',
+      system-ui,
+      sans-serif;
+
     font-weight: 700;
+
     letter-spacing: 0.025em;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-  }
-}
 
-/* ── Green gradient system (Gemini-style accent, recolored to this app's emerald palette) ──
-   Widened from the original 3-stop emerald-only range (which read as flat at
-   small sizes) to a mint → emerald → deep forest spread, so the gradient is
-   visibly a gradient rather than a slightly-shaded solid color. */
-@layer utilities {
+    text-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.1);
+  }
+
+
+  /* =======================================================
+     GEMINI-STYLE GREEN GRADIENT SYSTEM
+     
+     Soft mint + emerald + transparent ambient lighting.
+     NOT a flat green block.
+     ======================================================= */
+
   :root {
-    --gradient-green: linear-gradient(135deg, #6ee7b7 0%, #34d399 25%, #10b981 50%, #059669 75%, #047857 100%);
-    --gradient-green-soft: linear-gradient(135deg, rgba(110,231,183,0.18) 0%, rgba(16,185,129,0.18) 50%, rgba(4,120,87,0.18) 100%);
+
+    /*
+     * Main Green AI gradient.
+     *
+     * Multiple radial gradients create the soft
+     * "light coming from different areas" effect.
+     */
+    --gradient-green:
+
+      radial-gradient(
+        circle at 5% 5%,
+        rgba(167, 243, 208, 0.95) 0%,
+        rgba(110, 231, 183, 0.70) 20%,
+        rgba(110, 231, 183, 0.20) 38%,
+        transparent 55%
+      ),
+
+      radial-gradient(
+        circle at 95% 10%,
+        rgba(52, 211, 153, 0.75) 0%,
+        rgba(16, 185, 129, 0.38) 25%,
+        transparent 55%
+      ),
+
+      radial-gradient(
+        circle at 90% 90%,
+        rgba(5, 150, 105, 0.62) 0%,
+        rgba(16, 185, 129, 0.30) 28%,
+        transparent 58%
+      ),
+
+      radial-gradient(
+        circle at 10% 90%,
+        rgba(110, 231, 183, 0.60) 0%,
+        rgba(52, 211, 153, 0.18) 30%,
+        transparent 55%
+      ),
+
+      linear-gradient(
+        135deg,
+        #d1fae5 0%,
+        #a7f3d0 30%,
+        #6ee7b7 58%,
+        #34d399 80%,
+        #10b981 100%
+      );
+
+
+    /*
+     * Soft version.
+     *
+     * Recommended for large chat/AI surfaces.
+     */
+    --gradient-green-soft:
+
+      radial-gradient(
+        circle at 0% 0%,
+        rgba(167, 243, 208, 0.75),
+        transparent 45%
+      ),
+
+      radial-gradient(
+        circle at 100% 5%,
+        rgba(52, 211, 153, 0.45),
+        transparent 48%
+      ),
+
+      radial-gradient(
+        circle at 100% 100%,
+        rgba(16, 185, 129, 0.35),
+        transparent 55%
+      ),
+
+      radial-gradient(
+        circle at 0% 100%,
+        rgba(110, 231, 183, 0.45),
+        transparent 50%
+      ),
+
+      linear-gradient(
+        135deg,
+        #ecfdf5 0%,
+        #d1fae5 45%,
+        #a7f3d0 100%
+      );
+
+
+    /*
+     * Extremely subtle version.
+     *
+     * Use this when the background should mostly
+     * remain white while retaining Green AI branding.
+     */
+    --gradient-green-subtle:
+
+      radial-gradient(
+        circle at 0% 0%,
+        rgba(167, 243, 208, 0.55),
+        transparent 42%
+      ),
+
+      radial-gradient(
+        circle at 100% 0%,
+        rgba(52, 211, 153, 0.28),
+        transparent 45%
+      ),
+
+      radial-gradient(
+        circle at 100% 100%,
+        rgba(16, 185, 129, 0.20),
+        transparent 50%
+      ),
+
+      #ecfdf5;
+
+
+    /*
+     * Ambient glow used behind UI.
+     */
+    --green-ambient:
+
+      radial-gradient(
+        circle at 20% 20%,
+        rgba(110, 231, 183, 0.42),
+        transparent 42%
+      ),
+
+      radial-gradient(
+        circle at 80% 20%,
+        rgba(52, 211, 153, 0.32),
+        transparent 44%
+      ),
+
+      radial-gradient(
+        circle at 70% 80%,
+        rgba(16, 185, 129, 0.30),
+        transparent 50%
+      );
   }
 
-  /* Text: e.g. logo wordmark, headings */
+
+  /* =======================================================
+     TEXT GRADIENT
+     ======================================================= */
+
   .text-gradient-green {
-    background: var(--gradient-green);
+    background:
+      linear-gradient(
+        120deg,
+        #047857 0%,
+        #059669 30%,
+        #10b981 65%,
+        #34d399 100%
+      );
+
     -webkit-background-clip: text;
     background-clip: text;
+
     color: transparent;
     -webkit-text-fill-color: transparent;
   }
 
-  /* Solid gradient fill: e.g. avatar badges, active buttons */
+
+  /* =======================================================
+     MAIN GREEN GRADIENT
+     ======================================================= */
+
   .bg-gradient-green {
     background: var(--gradient-green);
+
+    background-size: 160% 160%;
   }
 
-  /* Gradient ring/border overlay: e.g. input box focus state.
-     Requires the parent to have position: relative and a border-radius,
-     which .ring-gradient-green inherits via border-radius: inherit. */
+
+  /* =======================================================
+     SOFT GREEN GRADIENT
+     
+     THIS is the preferred class for the large AI card.
+     ======================================================= */
+
+  .bg-gradient-green-soft {
+    background: var(--gradient-green-soft);
+
+    background-size: 180% 180%;
+  }
+
+
+  /* =======================================================
+     SUBTLE GREEN SURFACE
+     ======================================================= */
+
+  .bg-gradient-green-subtle {
+    background: var(--gradient-green-subtle);
+
+    background-size: 180% 180%;
+  }
+
+
+  /* =======================================================
+     GEMINI-STYLE AI RESPONSE SURFACE
+     
+     If you want the exact soft appearance shown in the
+     screenshot target, apply this to the main response
+     container.
+     ======================================================= */
+
+  .ai-response-surface {
+    position: relative;
+
+    background:
+
+      radial-gradient(
+        circle at 0% 0%,
+        rgba(167, 243, 208, 0.72),
+        transparent 42%
+      ),
+
+      radial-gradient(
+        circle at 100% 0%,
+        rgba(52, 211, 153, 0.42),
+        transparent 45%
+      ),
+
+      radial-gradient(
+        circle at 100% 100%,
+        rgba(16, 185, 129, 0.30),
+        transparent 50%
+      ),
+
+      radial-gradient(
+        circle at 0% 100%,
+        rgba(110, 231, 183, 0.35),
+        transparent 48%
+      ),
+
+      rgba(236, 253, 245, 0.94);
+
+    border: 1px solid rgba(16, 185, 129, 0.25);
+
+    box-shadow:
+      0 10px 30px rgba(16, 185, 129, 0.08);
+
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+
+
+  /* =======================================================
+     GRADIENT RING / BORDER
+     ======================================================= */
+
   .ring-gradient-green {
     position: relative;
+
+    isolation: isolate;
   }
+
+
   .ring-gradient-green::before {
-    content: '';
+    content: "";
+
     position: absolute;
-    inset: -2px;
+
+    inset: -1px;
+
     border-radius: inherit;
-    padding: 2px;
-    background: var(--gradient-green);
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+
+    padding: 1px;
+
+    background:
+      linear-gradient(
+        135deg,
+        rgba(167, 243, 208, 0.95),
+        rgba(52, 211, 153, 0.85),
+        rgba(16, 185, 129, 0.75),
+        rgba(110, 231, 183, 0.90)
+      );
+
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+
     -webkit-mask-composite: xor;
+
     mask-composite: exclude;
+
     pointer-events: none;
-    transition: opacity 0.2s ease;
   }
 
-  /* Animated glow: e.g. active "generating" / stop button state */
-  @keyframes gradient-pulse {
-    0%, 100% { opacity: 0.75; }
-    50%      { opacity: 1; }
-  }
-  .gradient-glow-active {
-    background: var(--gradient-green);
-    animation: gradient-pulse 1.6s ease-in-out infinite;
-  }
 
-  /* Slow-shifting animated gradient background: e.g. thinking/loading state */
-  @keyframes gradient-shift {
-    0%   { background-position: 0% 50%; }
-    50%  { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-  }
-  .gradient-shimmer-green {
-    background: linear-gradient(270deg, #6ee7b7, #34d399, #10b981, #059669, #047857, #059669, #10b981, #34d399, #6ee7b7);
-    background-size: 400% 400%;
-    animation: gradient-shift 3s ease infinite;
-  }
+  /* =======================================================
+     GEMINI-STYLE AMBIENT FRAME
+     ======================================================= */
 
-  /* Ambient glowing rounded frame — a persistent, slowly animated gradient
-     ring plus a soft blurred halo behind it, closer to Gemini's ambient
-     glow around its main surfaces. Apply to a container that already has
-     position set (or let this set it) and a border-radius; the ring and
-     glow both pick up that radius via `inherit`. */
   .gradient-glow-frame {
     position: relative;
+
+    isolation: isolate;
+
     z-index: 0;
   }
+
+
+  /*
+   * Soft animated border.
+   */
+
   .gradient-glow-frame::before {
-    content: '';
+    content: "";
+
     position: absolute;
-    inset: -1.5px;
+
+    inset: -1px;
+
     border-radius: inherit;
-    padding: 1.5px;
-    background: linear-gradient(135deg, #6ee7b7, #34d399, #10b981, #059669, #047857, #059669, #10b981, #34d399, #6ee7b7);
-    background-size: 300% 300%;
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+
+    padding: 1px;
+
+    background:
+      linear-gradient(
+        120deg,
+        rgba(167, 243, 208, 0.95),
+        rgba(52, 211, 153, 0.80),
+        rgba(16, 185, 129, 0.70),
+        rgba(110, 231, 183, 0.85),
+        rgba(167, 243, 208, 0.95)
+      );
+
+    background-size: 200% 200%;
+
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+
     -webkit-mask-composite: xor;
+
     mask-composite: exclude;
+
     pointer-events: none;
-    animation: gradient-shift 8s ease infinite;
+
+    animation:
+      gemini-border-shift
+      10s
+      ease-in-out
+      infinite;
   }
+
+
+  /*
+   * Large soft halo.
+   *
+   * Kept intentionally subtle so it doesn't become
+   * a neon green glow.
+   */
+
   .gradient-glow-frame::after {
-    content: '';
+    content: "";
+
     position: absolute;
-    inset: -10px;
+
+    inset: -18px;
+
     border-radius: inherit;
-    background: var(--gradient-green);
-    filter: blur(24px);
-    opacity: 0.22;
-    z-index: -1;
-    pointer-events: none;
-    animation: gradient-pulse 4s ease-in-out infinite;
-  }
-}
+
+    background:
+
+      radial-gradient(
+        ellipse at 20% 20%,
+        rgba(110, 231, 183, 0.38),
+        transparent 50%
+      ),
+
+      radial-gradient(
+        ellipse at 80% 30%,
+        rgba(52, 211, 153, 0.28),
+        transparent 52%
+      ),
+
+      radial-gradient(
+        ellipse at 70% 90%,
+        rgba(16, 185, 129, 0.25
