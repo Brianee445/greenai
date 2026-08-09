@@ -52,20 +52,29 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-transparent">
-      {messages.map((message) => (
-        <MessageBubble 
-          key={message.id} 
-          message={message} 
-          darkMode={darkMode} 
-          userProfile={userProfile}
-          onReaction={onMessageReaction}
-        />
-      ))}
-      
-      {isTyping && <TypingIndicator darkMode={darkMode} />}
-      
-      <div ref={messagesEndRef} className="h-4" />
+    // Outer wrapper reserves breathing room (p-2/p-3) so the glow in
+    // .gradient-glow-frame isn't clipped by the parent's edges or the
+    // sidebar/header. Inner element carries the actual rounded frame,
+    // the animated gradient ring, and the scrollable message list.
+    <div className="flex-1 overflow-hidden p-2 sm:p-3">
+      <div
+        className="gradient-glow-frame h-full rounded-3xl overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 scrollbar-track-transparent"
+        style={{ backgroundColor: darkMode ? '#212121' : '#ffffff' }}
+      >
+        {messages.map((message) => (
+          <MessageBubble 
+            key={message.id} 
+            message={message} 
+            darkMode={darkMode} 
+            userProfile={userProfile}
+            onReaction={onMessageReaction}
+          />
+        ))}
+        
+        {isTyping && <TypingIndicator darkMode={darkMode} />}
+        
+        <div ref={messagesEndRef} className="h-4" />
+      </div>
     </div>
   );
 };
