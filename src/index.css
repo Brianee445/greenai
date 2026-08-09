@@ -159,17 +159,17 @@ body {
    visibly a gradient rather than a slightly-shaded solid color. */
 @layer utilities {
   :root {
-    --gradient-green: linear-gradient(135deg, #5eead4 0%, #34d399 25%, #10b981 50%, #059669 75%, #065f46 100%);
-    --gradient-green-soft: linear-gradient(135deg, rgba(94,234,212,0.18) 0%, rgba(16,185,129,0.18) 50%, rgba(6,95,70,0.18) 100%);
+    --gradient-green: linear-gradient(135deg, #6ee7b7 0%, #34d399 25%, #10b981 50%, #059669 75%, #047857 100%);
+    --gradient-green-soft: linear-gradient(135deg, rgba(110,231,183,0.18) 0%, rgba(16,185,129,0.18) 50%, rgba(4,120,87,0.18) 100%);
   }
 
   /* Text: e.g. logo wordmark, headings */
   .text-gradient-green {
     background: var(--gradient-green);
-    background-clip: text;
     -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    background-clip: text;
     color: transparent;
+    -webkit-text-fill-color: transparent;
   }
 
   /* Solid gradient fill: e.g. avatar badges, active buttons */
@@ -214,7 +214,7 @@ body {
     100% { background-position: 0% 50%; }
   }
   .gradient-shimmer-green {
-    background: linear-gradient(270deg, #5eead4, #34d399, #10b981, #059669, #10b981, #34d399, #5eead4);
+    background: linear-gradient(270deg, #6ee7b7, #34d399, #10b981, #059669, #047857, #059669, #10b981, #34d399, #6ee7b7);
     background-size: 400% 400%;
     animation: gradient-shift 3s ease infinite;
   }
@@ -234,7 +234,7 @@ body {
     inset: -1.5px;
     border-radius: inherit;
     padding: 1.5px;
-    background: linear-gradient(135deg, #5eead4, #34d399, #10b981, #059669, #10b981, #34d399, #5eead4);
+    background: linear-gradient(135deg, #6ee7b7, #34d399, #10b981, #059669, #047857, #059669, #10b981, #34d399, #6ee7b7);
     background-size: 300% 300%;
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     -webkit-mask-composite: xor;
