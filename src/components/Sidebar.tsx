@@ -15,6 +15,9 @@ interface SidebarProps {
   onNewConversation: () => void;
   darkMode: boolean;
   userEmail: string;
+  // Optional display name for the profile card avatar/initial. Falls back to
+  // deriving an initial from userEmail when not provided.
+  userName?: string;
   isAuthenticated: boolean;
   onSignOut: () => Promise<void>;
 }
@@ -31,6 +34,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onNewConversation,
   darkMode,
   userEmail,
+  userName,
   isAuthenticated,
   onSignOut,
 }) => {
@@ -75,6 +79,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     backgroundColor: darkMode ? '#171717' : '#ffffff',
     borderRight: darkMode ? 'none' : '1px solid #e5e7eb',
   } as const;
+
+  const profileInitial = (userName?.trim()?.[0] ?? userEmail?.trim()?.[0] ?? 'U').toUpperCase();
 
   return (
     <>
@@ -259,6 +265,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
         >
           {isAuthenticated ? (
             <>
+              {/* Profile card: gradient avatar + name/email, replaces the old
+                  plain-text email row so the user's identity actually reads
+                  as a "profile section" rather than a stray line of text. */}
+              {userEmail && (
+                <div
+                  className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg mb-1"
+                  style={{
+                    backgroundColor: darkMode ? 'rgba(16,185,129,0.08)' : 'rgba(16,185,129,0.06)',
+                  }}
+                >
+                  <div
+                    className="w-8 h-8 rounded-full bg-gradient-green flex items-center justify-center text-white text-xs font-semibold flex-shrink-0"
+                  >
+                    {profileInitial}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    {userName?.trim() && (
+                      <p
+                        className="truncate"
+                        style={{ fontSize: '13px', fontWeight: 500, color: darkMode ? '#ececec' : '#111827' }}
+                      >
+                        {userName}
+                      </p>
+                    )}
+                    <p
+                      className="truncate"
+                      style={{ fontSize: '11px', color: darkMode ? '#8e8ea0' : '#6b7280' }}
+                    >
+                      {userEmail}
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <button
                 onClick={onSettingsClick}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg w-full text-left transition-colors touch-manipulation ${
@@ -286,17 +326,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   {darkMode ? 'Light mode' : 'Dark mode'}
                 </span>
               </button>
-
-              {userEmail && (
-                <div
-                  className="flex items-center gap-3 px-3 py-2 rounded-lg"
-                  style={{ color: darkMode ? '#8e8ea0' : '#6b7280' }}
-                >
-                  <span style={{ fontSize: '12px', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {userEmail}
-                  </span>
-                </div>
-              )}
 
               <Link
                 to="/pricing"
