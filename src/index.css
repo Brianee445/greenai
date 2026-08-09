@@ -152,3 +152,67 @@ body {
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   }
 }
+
+/* ── Green gradient system (Gemini-style accent, recolored to this app's emerald palette) ── */
+@layer utilities {
+  :root {
+    --gradient-green: linear-gradient(135deg, #34d399 0%, #10b981 45%, #059669 100%);
+    --gradient-green-soft: linear-gradient(135deg, rgba(52,211,153,0.15) 0%, rgba(16,185,129,0.15) 45%, rgba(5,150,105,0.15) 100%);
+  }
+
+  /* Text: e.g. logo wordmark, headings */
+  .text-gradient-green {
+    background: var(--gradient-green);
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+
+  /* Solid gradient fill: e.g. avatar badges, active buttons */
+  .bg-gradient-green {
+    background: var(--gradient-green);
+  }
+
+  /* Gradient ring/border overlay: e.g. input box focus state.
+     Requires the parent to have position: relative and a border-radius,
+     which .ring-gradient-green inherits via border-radius: inherit. */
+  .ring-gradient-green {
+    position: relative;
+  }
+  .ring-gradient-green::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    padding: 2px;
+    background: var(--gradient-green);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+
+  /* Animated glow: e.g. active "generating" / stop button state */
+  @keyframes gradient-pulse {
+    0%, 100% { opacity: 0.75; }
+    50%      { opacity: 1; }
+  }
+  .gradient-glow-active {
+    background: var(--gradient-green);
+    animation: gradient-pulse 1.6s ease-in-out infinite;
+  }
+
+  /* Slow-shifting animated gradient background: e.g. thinking/loading state */
+  @keyframes gradient-shift {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  .gradient-shimmer-green {
+    background: linear-gradient(270deg, #34d399, #10b981, #059669, #10b981, #34d399);
+    background-size: 400% 400%;
+    animation: gradient-shift 3s ease infinite;
+  }
+}
