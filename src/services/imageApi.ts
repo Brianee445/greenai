@@ -1,55 +1,33 @@
-import { API_CONFIG } from '../config/apiConfig';
+import { supabase } from '../lib/supabase';
 
-const IMAGE_API_KEY = API_CONFIG.GEMINI_API_KEY;
-const IMAGE_API_URL = API_CONFIG.GEMINI_API_URL;
+// Image generation goes through the generate-image Supabase edge function,
+// which holds the real GEMINI_API_KEY server-side — the same key used by
+// chat (v1-chat-completion). No key ever lives in this file or the browser.
 
 export const generateImage = async (prompt: string): Promise<{ url: string; blob: Blob }> => {
-  try {
-    const response = await fetch(`${IMAGE_API_URL}?key=${IMAGE_API_KEY}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        instances: [
-          {
-            prompt: `Generate a high-quality, detailed image based on this description: ${prompt}. Make it visually appealing, creative, and professionally rendered.`,
-          },
-        ],
-        parameters: {
-          sampleCount: 1,
-          aspectRatio: '1:1',
-          safetyFilterLevel: 'block_some',
-          personGeneration: 'allow_adult',
-        },
-      }),
-    });
+  const { data, error } = await supabase.functions.invoke('generate-image', {
+    body: { prompt },
+  });
 
-    if (!response.ok) {
-      const errorBody = await response.json().catch(() => null);
-      throw new Error(
-        errorBody?.error?.message || `HTTP error! status: ${response.status}`
-      );
-    }
-
-    const data = await response.json();
-
-    const prediction = data.predictions?.[0];
-
-    if (!prediction?.bytesBase64Encoded) {
-      throw new Error('No image data found in response');
-    }
-
-    const mimeType = prediction.mimeType || 'image/png';
-    const blob = base64ToBlob(prediction.bytesBase64Encoded, mimeType);
-    const url = URL.createObjectURL(blob);
-
-    // Return both so the caller can revoke the URL and download without re-fetching
-    return { url, blob };
-  } catch (error) {
-    console.error('Error generating image:', error);
-    throw error;
+  if (error) {
+    console.error('Error invoking generate-image function:', error);
+    throw new Error(error.message || 'Failed to generate image');
   }
+
+  if (data?.error) {
+    throw new Error(data.error);
+  }
+
+  if (!data?.image) {
+    throw new Error('No image data returned');
+  }
+
+  const mimeType = data.mimeType || 'image/png';
+  const blob = base64ToBlob(data.image, mimeType);
+  const url = URL.createObjectURL(blob);
+
+  // Return both so the caller can revoke the URL and download without re-fetching
+  return { url, blob };
 };
 
 const base64ToBlob = (base64: string, mimeType: string): Blob => {
