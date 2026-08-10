@@ -9,6 +9,7 @@ import { useLocalStorage } from './hooks/useLocalStorage';
 import { useAuth } from './auth/hooks/useAuth';
 import { useAuthModal } from './auth/providers/AuthModalProvider';
 import { sendMessage } from './services/geminiApi';
+import { generateImage } from './services/imageApi';
 import { clearConversationMemory } from './utils/memoryUtils';
 import { Message, AppSettings } from './types';
 import { checkQuota, recordUsage } from './subscriptions/services/api';
@@ -130,7 +131,7 @@ export default function App() {
 
   // ─── Messaging ────────────────────────────────────────────────────────────
 
-  const handleSendMessage = async (text: string, files?: any[], webSearch?: boolean) => {
+  const handleSendMessage = async (text: string, files?: any[], webSearch?: boolean, imageGen?: boolean) => {
     if (isProcessing) return;
 
     if (isAuthenticated) {
@@ -174,35 +175,56 @@ export default function App() {
     setMessages(newMessages);
 
     try {
-      const response = await sendMessage(
-        text,
-        settings.currentMode,
-        settings.currentModel,
-        currentConversationId,
-        settings.companionMode,
-        settings.selectedLanguage,
-        { ...settings.userProfile, email: '' },
-        files,
-        webSearch ?? false
-      );
+      if (imageGen) {
+        const { url } = await generateImage(text);
 
-      // If the user cancelled while this was in flight, don't append a
-      // response to a conversation that's already moved on.
-      if (activeRequestIdRef.current !== requestId) return;
+        if (activeRequestIdRef.current !== requestId) return;
 
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: response.text,
-        sender: 'ai',
-        timestamp: Date.now(),
-        mode: settings.currentMode,
-        webSearch: response.webSearch ?? false,
-      };
+        const aiImageMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          text: '',
+          sender: 'ai',
+          timestamp: Date.now(),
+          mode: settings.currentMode,
+          imageUrl: url,
+        };
 
-      setMessages([...newMessages, aiMessage]);
+        setMessages([...newMessages, aiImageMessage]);
 
-      if (isAuthenticated) {
-        recordUsage('chat_message', { model: settings.currentModel, mode: settings.currentMode }).catch(() => {});
+        if (isAuthenticated) {
+          recordUsage('image_generation', { model: 'imagen-3.0-generate-002' }).catch(() => {});
+        }
+      } else {
+        const response = await sendMessage(
+          text,
+          settings.currentMode,
+          settings.currentModel,
+          currentConversationId,
+          settings.companionMode,
+          settings.selectedLanguage,
+          { ...settings.userProfile, email: '' },
+          files,
+          webSearch ?? false
+        );
+
+        // If the user cancelled while this was in flight, don't append a
+        // response to a conversation that's already moved on.
+        if (activeRequestIdRef.current !== requestId) return;
+
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          text: response.text,
+          sender: 'ai',
+          timestamp: Date.now(),
+          mode: settings.currentMode,
+          webSearch: response.webSearch ?? false,
+        };
+
+        setMessages([...newMessages, aiMessage]);
+
+        if (isAuthenticated) {
+          recordUsage('chat_message', { model: settings.currentModel, mode: settings.currentMode }).catch(() => {});
+        }
       }
     } catch (error) {
       if (activeRequestIdRef.current !== requestId) return;
@@ -210,7 +232,9 @@ export default function App() {
       console.error('Error sending message:', error);
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: 'Something went wrong. Please try again.',
+        text: imageGen
+          ? (error instanceof Error ? error.message : 'Something went wrong generating your image. Please try again.')
+          : 'Something went wrong. Please try again.',
         sender: 'ai',
         timestamp: Date.now(),
         mode: settings.currentMode
@@ -357,7 +381,7 @@ export default function App() {
         >
           <div className="max-w-3xl mx-auto">
             <ChatInput
-              onSendMessage={(message, files, webSearch) => handleSendMessage(message, files, webSearch)}
+              onSendMessage={(message, files, webSearch, imageGen) => handleSendMessage(message, files, webSearch, imageGen)}
               onStopGeneration={handleStopGeneration}
               disabled={isProcessing}
               placeholder="Message GREEN AI"

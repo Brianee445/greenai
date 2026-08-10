@@ -8,6 +8,7 @@ export interface Message {
   liked?: boolean;
   disliked?: boolean;
   webSearch?: boolean;
+  imageUrl?: string;
 }
 
 export interface Conversation {
