@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Paperclip, X, FileText, ArrowUp, Square, Mic, MicOff, Globe } from 'lucide-react';
+import { Paperclip, X, FileText, ArrowUp, Square, Mic, MicOff, Globe, ImagePlus } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { validateFile } from '../subscriptions/utils/upload';
 
@@ -17,7 +17,7 @@ export interface UploadedFile {
 }
 
 interface ChatInputProps {
-  onSendMessage: (message: string, files?: UploadedFile[], webSearch?: boolean) => void;
+  onSendMessage: (message: string, files?: UploadedFile[], webSearch?: boolean, imageGen?: boolean) => void;
   // Called when the user taps the stop button while a response is generating.
   // Optional so ChatInput still works untouched in places that don't wire it up yet.
   onStopGeneration?: () => void;
@@ -40,6 +40,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const [isProcessingFiles, setIsProcessingFiles] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [webSearchEnabled, setWebSearchEnabled] = useState(false);
+  const [imageGenEnabled, setImageGenEnabled] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
 
   const textareaRef      = useRef<HTMLTextAreaElement>(null);
@@ -243,7 +244,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   const handleSubmit = () => {
     if (!canSend || disabled) return;
-    onSendMessage(message.trim(), uploadedFiles.length ? uploadedFiles : undefined, webSearchEnabled);
+    onSendMessage(message.trim(), uploadedFiles.length ? uploadedFiles : undefined, webSearchEnabled, imageGenEnabled);
     setMessage('');
     setUploadedFiles([]);
   };
@@ -339,7 +340,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
             onChange={e => setMessage(e.target.value)}
             onFocus={() => setIsFocused(true)}
             onBlur={() => setIsFocused(false)}
-            placeholder={isProcessingFiles ? 'Processing files…' : placeholder}
+            placeholder={isProcessingFiles ? 'Processing files…' : imageGenEnabled ? 'Describe the image you want…' : placeholder}
             disabled={disabled || isProcessingFiles}
             rows={1}
             className="w-full resize-none outline-none text-sm sm:text-[15px] leading-relaxed transition-[height] duration-100"
@@ -419,10 +420,33 @@ export const ChatInput: React.FC<ChatInputProps> = ({
               className="hidden"
             />
 
+            {/* Image Generation Toggle */}
+            <button
+              type="button"
+              onClick={() => {
+                setImageGenEnabled(prev => !prev);
+                if (!imageGenEnabled) setWebSearchEnabled(false);
+              }}
+              disabled={disabled}
+              title={imageGenEnabled ? 'Image generation on — click to disable' : 'Generate an image instead of text'}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all duration-200 border ml-1"
+              style={{
+                color:           imageGenEnabled ? '#10b981' : iconColor,
+                backgroundColor: imageGenEnabled ? (darkMode ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.1)') : 'transparent',
+                borderColor:     imageGenEnabled ? '#10b981' : (darkMode ? '#444' : '#d1d5db'),
+              }}
+            >
+              <ImagePlus size={13} />
+              <span>Image</span>
+            </button>
+
             {/* Web Search Toggle */}
             <button
               type="button"
-              onClick={() => setWebSearchEnabled(prev => !prev)}
+              onClick={() => {
+                setWebSearchEnabled(prev => !prev);
+                if (!webSearchEnabled) setImageGenEnabled(false);
+              }}
               disabled={disabled}
               title={webSearchEnabled ? 'Web search on — click to disable' : 'Enable web search'}
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all duration-200 border ml-1"

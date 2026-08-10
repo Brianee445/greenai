@@ -1,6 +1,6 @@
 import React from 'react';
 import { Message, UserProfile } from '../types';
-import { Copy, Check, ThumbsUp, ThumbsDown, Download, Globe } from 'lucide-react';
+import { Copy, Check, ThumbsUp, ThumbsDown, Download, Globe, ImageIcon } from 'lucide-react';
 
 interface MessageBubbleProps {
   message: Message;
@@ -66,6 +66,23 @@ ${text.replace(/\n/g, '<br>')}
     URL.revokeObjectURL(url);
   } catch (error) {
     console.error('Download failed:', error);
+  }
+};
+
+const downloadGeneratedImage = async (imageUrl: string, filename: string = 'green-ai-image.png') => {
+  try {
+    const res = await fetch(imageUrl);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Image download failed:', error);
   }
 };
 
@@ -200,10 +217,31 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   Searched the web
                 </span>
               )}
+              {message.imageUrl && (
+                <span
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium border"
+                  style={{
+                    color: '#10b981',
+                    backgroundColor: darkMode ? 'rgba(16,185,129,0.12)' : 'rgba(16,185,129,0.08)',
+                    borderColor: darkMode ? 'rgba(16,185,129,0.3)' : 'rgba(16,185,129,0.25)',
+                  }}
+                >
+                  <ImageIcon size={10} />
+                  Generated image
+                </span>
+              )}
             </div>
           )}
 
-          {isUser ? (
+          {message.imageUrl ? (
+            <div className="rounded-2xl overflow-hidden border max-w-xs sm:max-w-sm" style={{ borderColor: darkMode ? '#3a3a3a' : '#e5e5e5' }}>
+              <img
+                src={message.imageUrl}
+                alt={message.text || 'AI generated image'}
+                className="w-full h-auto block"
+              />
+            </div>
+          ) : isUser ? (
             <div className={`px-4 py-2.5 rounded-[18px] rounded-tr-[4px] text-[15px] leading-relaxed ${
               darkMode
                 ? 'bg-gray-700 text-gray-100 border border-gray-600'
@@ -220,56 +258,73 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           {!isUser && (
             <div className="flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
 
-              {/* Copy */}
-              <button
-                onClick={handleCopy}
-                className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs border transition-colors ${
-                  darkMode
-                    ? 'border-gray-600 text-gray-400 hover:text-gray-100 hover:bg-gray-700'
-                    : 'border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-100'
-                }`}
-              >
-                {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                {copied ? 'Copied' : 'Copy'}
-              </button>
-
-              {/* Download */}
-              <div className="relative group/download">
+              {message.imageUrl ? (
+                /* Image messages: a single direct download, no text-oriented Copy/PDF/DOC options */
                 <button
-                  className={`p-1.5 rounded-md border text-xs transition-colors ${
+                  onClick={() => downloadGeneratedImage(message.imageUrl!)}
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs border transition-colors ${
                     darkMode
                       ? 'border-gray-600 text-gray-400 hover:text-green-400 hover:bg-gray-700'
                       : 'border-gray-200 text-gray-500 hover:text-green-600 hover:bg-gray-100'
                   }`}
                 >
                   <Download className="w-3 h-3" />
+                  Download image
                 </button>
+              ) : (
+                <>
+                  {/* Copy */}
+                  <button
+                    onClick={handleCopy}
+                    className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs border transition-colors ${
+                      darkMode
+                        ? 'border-gray-600 text-gray-400 hover:text-gray-100 hover:bg-gray-700'
+                        : 'border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-100'
+                    }`}
+                  >
+                    {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                    {copied ? 'Copied' : 'Copy'}
+                  </button>
 
-                <div className={`absolute bottom-full left-0 mb-1 opacity-0 group-hover/download:opacity-100 transition-opacity duration-150 ${
-                  darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
-                } border rounded-lg shadow-lg p-1 min-w-[120px] z-10`}>
-                  <button
-                    onClick={() => downloadAsPDF(message.text)}
-                    className={`w-full text-left px-2 py-1.5 text-xs rounded transition-colors ${
-                      darkMode
-                        ? 'text-gray-300 hover:text-white hover:bg-gray-700'
-                        : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100'
-                    }`}
-                  >
-                    Download as PDF
-                  </button>
-                  <button
-                    onClick={() => downloadAsDoc(message.text)}
-                    className={`w-full text-left px-2 py-1.5 text-xs rounded transition-colors ${
-                      darkMode
-                        ? 'text-gray-300 hover:text-white hover:bg-gray-700'
-                        : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100'
-                    }`}
-                  >
-                    Download as DOC
-                  </button>
-                </div>
-              </div>
+                  {/* Download */}
+                  <div className="relative group/download">
+                    <button
+                      className={`p-1.5 rounded-md border text-xs transition-colors ${
+                        darkMode
+                          ? 'border-gray-600 text-gray-400 hover:text-green-400 hover:bg-gray-700'
+                          : 'border-gray-200 text-gray-500 hover:text-green-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <Download className="w-3 h-3" />
+                    </button>
+
+                    <div className={`absolute bottom-full left-0 mb-1 opacity-0 group-hover/download:opacity-100 transition-opacity duration-150 ${
+                      darkMode ? 'bg-gray-800 border-gray-600' : 'bg-white border-gray-200'
+                    } border rounded-lg shadow-lg p-1 min-w-[120px] z-10`}>
+                      <button
+                        onClick={() => downloadAsPDF(message.text)}
+                        className={`w-full text-left px-2 py-1.5 text-xs rounded transition-colors ${
+                          darkMode
+                            ? 'text-gray-300 hover:text-white hover:bg-gray-700'
+                            : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100'
+                        }`}
+                      >
+                        Download as PDF
+                      </button>
+                      <button
+                        onClick={() => downloadAsDoc(message.text)}
+                        className={`w-full text-left px-2 py-1.5 text-xs rounded transition-colors ${
+                          darkMode
+                            ? 'text-gray-300 hover:text-white hover:bg-gray-700'
+                            : 'text-gray-700 hover:text-gray-900 hover:bg-gray-100'
+                        }`}
+                      >
+                        Download as DOC
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
 
               {/* Like */}
               <button
