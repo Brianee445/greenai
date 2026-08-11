@@ -16,8 +16,19 @@
 //
 // Reuses the same secret already set for chat — no new secret needed:
 //   supabase secrets set GEMINI_API_KEY=your-real-key-here
+//
+// Also uploads the resulting image to Supabase Storage (bucket:
+// generated-images) using the service role key, which Supabase injects
+// into every edge function automatically — no extra secret needed for
+// that either. This is what makes generated images survive a page
+// refresh: without it, the client only ever holds a blob: URL, which is
+// torn down the moment the tab reloads or closes.
+
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*", // tighten to your actual domain in production
@@ -102,8 +113,8 @@ Deno.serve(async (req: Request) => {
         // the same" framing, the model tends to treat a casual instruction
         // as license to regenerate the whole scene rather than edit it —
         // this is Google's own documented pattern for reliable edits.
-        ? `Using the provided image, ${prompt}. Keep everything else in the image exactly the same — the subject, their appearance, the composition, and the style — unless the instruction explicitly asks to change it.`
-        : `Generate a high-quality, detailed image based on this description: ${prompt}`,
+        ? `Using the provided image, ${prompt}. Keep everything else in the image exactly the same — the subject, their appearance, the composition, and the style — unless the instruction explicitly asks to change it. If the image contains any text, keep it in English only.`
+        : `Generate a high-quality, detailed image based on this description: ${prompt}. If the image includes any text or typography, it must be in English only — do not include text in any other language or script.`,
     });
 
     const geminiResponse = await fetch(API_URL, {
@@ -179,16 +190,70 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    return new Response(
-      JSON.stringify({
-        image: imageData,
-        mimeType: mimeType || "image/png",
-      }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+    const finalMimeType = mimeType || "image/png";
+
+    // Upload to Storage so the image has a permanent URL instead of only
+    // existing as base64 in this one response (which the client can only
+    // turn into an ephemeral blob: URL that dies on refresh).
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      console.error("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not available — returning base64 as a fallback, but this image will NOT persist across a page refresh.");
+      return new Response(
+        JSON.stringify({ image: imageData, mimeType: finalMimeType }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    try {
+      const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+      const byteCharacters = atob(imageData);
+      const byteArray = new Uint8Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteArray[i] = byteCharacters.charCodeAt(i);
+      }
+
+      const ext = finalMimeType.split("/")[1] || "png";
+      const path = `${crypto.randomUUID()}.${ext}`;
+
+      const { error: uploadError } = await supabaseAdmin.storage
+        .from("generated-images")
+        .upload(path, byteArray, { contentType: finalMimeType, upsert: false });
+
+      if (uploadError) {
+        console.error("Storage upload failed, falling back to base64:", uploadError);
+        return new Response(
+          JSON.stringify({ image: imageData, mimeType: finalMimeType }),
+          {
+            status: 200,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      const { data: publicUrlData } = supabaseAdmin.storage
+        .from("generated-images")
+        .getPublicUrl(path);
+
+      return new Response(
+        JSON.stringify({ url: publicUrlData.publicUrl, mimeType: finalMimeType }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    } catch (uploadErr) {
+      console.error("Unexpected error uploading to storage, falling back to base64:", uploadErr);
+      return new Response(
+        JSON.stringify({ image: imageData, mimeType: finalMimeType }),
+        {
+          status: 200,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
   } catch (error) {
     console.error("Unhandled error in generate-image:", error);
     return new Response(
