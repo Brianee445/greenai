@@ -1,14 +1,20 @@
 // supabase/functions/generate-image/index.ts
 //
-// Server-side proxy for image generation via Google's Imagen API.
-// Reuses the same GEMINI_API_KEY secret as v1-chat-completion — it never
-// reaches the client, only this function ever sees it.
+// Server-side proxy for image generation using Gemini's native image model
+// (gemini-3.1-flash-image / "Nano Banana 2"), via Google's current
+// Interactions API (v1beta/interactions) — the endpoint Google's own docs
+// now document for image generation, distinct from the older
+// v1beta/models/{model}:generateContent endpoint that v1-chat-completion
+// still uses for text chat.
+//
+// Same GEMINI_API_KEY secret as chat, same Google Cloud project — this is
+// just a different model within that same account, nothing extra to
+// enable. Reference: https://ai.google.dev/gemini-api/docs/image-generation
 //
 // Deploy with:
 //   supabase functions deploy generate-image
 //
-// No separate secret needed — this reads the same GEMINI_API_KEY already
-// set for chat:
+// Reuses the same secret already set for chat — no new secret needed:
 //   supabase secrets set GEMINI_API_KEY=your-real-key-here
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
@@ -22,14 +28,13 @@ const corsHeaders = {
 
 interface ImageRequestBody {
   prompt: string;
-  aspectRatio?: "1:1" | "3:4" | "4:3" | "9:16" | "16:9";
 }
 
-// imagen-3.0-generate-002 is reachable through the same Generative Language
-// API/key as the gemini-* chat models — no separate Vertex AI project needed.
-const IMAGE_MODEL = "imagen-3.0-generate-002";
-const API_URL =
-  `https://generativelanguage.googleapis.com/v1beta/models/${IMAGE_MODEL}:predict`;
+// If Google renames/retires this alias, check
+// https://ai.google.dev/gemini-api/docs/image-generation for the current
+// image-capable model id — same Interactions API call shape.
+const IMAGE_MODEL = "gemini-3.1-flash-image";
+const API_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -56,7 +61,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     const body: ImageRequestBody = await req.json();
-    const { prompt, aspectRatio = "1:1" } = body;
+    const { prompt } = body;
 
     if (!prompt || typeof prompt !== "string") {
       return new Response(
@@ -68,52 +73,72 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const imagenResponse = await fetch(`${API_URL}?key=${GEMINI_API_KEY}`, {
+    const geminiResponse = await fetch(API_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": GEMINI_API_KEY,
+      },
       body: JSON.stringify({
-        instances: [
+        model: IMAGE_MODEL,
+        input: [
           {
-            prompt:
-              `Generate a high-quality, detailed image based on this description: ${prompt}. Make it visually appealing, creative, and professionally rendered.`,
+            type: "text",
+            text: `Generate a high-quality, detailed image based on this description: ${prompt}`,
           },
         ],
-        parameters: {
-          sampleCount: 1,
-          aspectRatio,
-          safetyFilterLevel: "block_some",
-          personGeneration: "allow_adult",
-        },
       }),
     });
 
-    if (!imagenResponse.ok) {
-      const errorData = await imagenResponse.json().catch(() => ({}));
-      console.error("Imagen API error:", imagenResponse.status, errorData);
+    if (!geminiResponse.ok) {
+      const errorData = await geminiResponse.json().catch(() => ({}));
+      console.error("Gemini Interactions API error:", geminiResponse.status, errorData);
 
       let message =
-        `Image generation failed with status ${imagenResponse.status}`;
-      if (imagenResponse.status === 429) {
+        `Image generation failed with status ${geminiResponse.status}`;
+      if (geminiResponse.status === 429) {
         message = "Rate limit exceeded. Please wait a moment and try again.";
-      } else if (imagenResponse.status === 403) {
+      } else if (geminiResponse.status === 403) {
+        message = "Gemini API key is invalid or lacks the required permissions.";
+      } else if (geminiResponse.status === 404) {
         message =
-          "Gemini API key is invalid or lacks access to image generation.";
-      } else if (imagenResponse.status === 400) {
+          "Image generation model not found for this API key/project. It may need to be enabled, or the model name may have changed.";
+      } else if (geminiResponse.status === 400) {
         message = errorData?.error?.message ||
           "Invalid request sent to the image API. Try rephrasing your prompt.";
       }
 
       return new Response(JSON.stringify({ error: message }), {
-        status: imagenResponse.status,
+        status: geminiResponse.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const data = await imagenResponse.json();
-    const prediction = data?.predictions?.[0];
+    const data = await geminiResponse.json();
 
-    if (!prediction?.bytesBase64Encoded) {
-      console.error("Invalid Imagen response shape:", data);
+    // Prefer the convenience field if present, otherwise walk the raw
+    // steps/content structure — being defensive here since this API
+    // surface is new and the exact raw JSON shape isn't fully pinned down
+    // in the public docs (only SDK convenience accessors are shown).
+    let imageData: string | undefined = data?.output_image?.data;
+    let mimeType: string | undefined = data?.output_image?.mime_type;
+
+    if (!imageData) {
+      const steps = data?.steps ?? [];
+      for (const step of steps) {
+        if (step?.type !== "model_output") continue;
+        const content = step?.content ?? [];
+        const imageBlock = content.find((c: Record<string, unknown>) => c.type === "image");
+        if (imageBlock) {
+          imageData = imageBlock.data as string;
+          mimeType = (imageBlock.mime_type as string) || mimeType;
+          break;
+        }
+      }
+    }
+
+    if (!imageData) {
+      console.error("No image data in Interactions API response:", JSON.stringify(data));
       return new Response(
         JSON.stringify({
           error:
@@ -128,8 +153,8 @@ Deno.serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({
-        image: prediction.bytesBase64Encoded,
-        mimeType: prediction.mimeType || "image/png",
+        image: imageData,
+        mimeType: mimeType || "image/png",
       }),
       {
         status: 200,
