@@ -71,6 +71,7 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
+  const [pendingEditImage, setPendingEditImage] = useState<string | null>(null);
 
   // Tracks the in-flight request so "stop" can discard a response that
   // arrives after the user has already cancelled. The Gemini call isn't
@@ -176,7 +177,6 @@ export default function App() {
 
     try {
       if (imageGen) {
-        console.log('[image-gen] files received in handleSendMessage:', files);
         // Attached photos (if any) get sent alongside the prompt so the
         // model edits/refines them, rather than generating from text alone.
         const imageInputs = (files ?? [])
@@ -189,9 +189,11 @@ export default function App() {
               mimeType: mimeMatch ? mimeMatch[1] : (f.file?.type || 'image/png'),
             };
           });
-        console.log('[image-gen] imageInputs after filter/map:', imageInputs.length, imageInputs[0] ? { mimeType: imageInputs[0].mimeType, dataLength: imageInputs[0].data?.length } : null);
 
-        const { url } = await generateImage(text, imageInputs.length ? imageInputs : undefined);
+        const { url, isPersistent } = await generateImage(text, imageInputs.length ? imageInputs : undefined);
+        if (!isPersistent) {
+          console.warn('Generated image is a session-only blob: URL — it will not survive a page refresh. Check that SUPABASE_SERVICE_ROLE_KEY is available to the generate-image function.');
+        }
 
         if (activeRequestIdRef.current !== requestId) return;
 
@@ -207,7 +209,7 @@ export default function App() {
         setMessages([...newMessages, aiImageMessage]);
 
         if (isAuthenticated) {
-          recordUsage('image_generation', { model: 'imagen-3.0-generate-002' }).catch(() => {});
+          recordUsage('image_generation', { model: 'gemini-3.1-flash-image' }).catch(() => {});
         }
       } else {
         const response = await sendMessage(
@@ -381,6 +383,7 @@ export default function App() {
               companionMode={settings.companionMode}
               userProfile={{ ...settings.userProfile, email: '' }}
               onMessageReaction={handleMessageReaction}
+              onEditImage={(imageUrl) => setPendingEditImage(imageUrl)}
             />
           )}
         </div>
@@ -402,13 +405,9 @@ export default function App() {
               placeholder="Message GREEN AI"
               darkMode={settings.darkMode}
               onAuthRequired={isAuthenticated ? undefined : handleAuthRequired}
+              pendingEditImage={pendingEditImage}
+              onEditImageConsumed={() => setPendingEditImage(null)}
             />
-            <p
-              className="text-center mt-2"
-              style={{ fontSize: '11px', color: settings.darkMode ? '#8e8ea0' : '#acacac' }}
-            >
-              GREEN AI can make mistakes. Check important info.
-            </p>
           </div>
         </div>
       </div>
