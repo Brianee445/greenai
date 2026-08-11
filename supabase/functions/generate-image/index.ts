@@ -50,7 +50,14 @@ interface ImageRequestBody {
 // If Google renames/retires this alias, check
 // https://ai.google.dev/gemini-api/docs/image-generation for the current
 // image-capable model id — same Interactions API call shape.
+//
+// gemini-3.1-flash-image has documented, ongoing intermittent 404s on the
+// Interactions API (multiple independent developer reports, mid-2026) that
+// are unrelated to anything in this function — same request that works one
+// moment 404s the next, with no code change on either side. FALLBACK_MODEL
+// is Google's own suggested workaround for exactly this failure mode.
 const IMAGE_MODEL = "gemini-3.1-flash-image";
+const FALLBACK_MODEL = "gemini-2.5-flash-image";
 const API_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
 
 Deno.serve(async (req: Request) => {
@@ -117,21 +124,44 @@ Deno.serve(async (req: Request) => {
         : `Generate a high-quality, detailed image based on this description: ${prompt}. If the image includes any text or typography, it must be in English only — do not include text in any other language or script.`,
     });
 
-    const geminiResponse = await fetch(API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": GEMINI_API_KEY,
-      },
-      body: JSON.stringify({
-        model: IMAGE_MODEL,
-        input: inputBlocks,
-      }),
-    });
+    async function callModel(modelId: string) {
+      return fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": GEMINI_API_KEY!,
+        },
+        body: JSON.stringify({
+          model: modelId,
+          input: inputBlocks,
+        }),
+      });
+    }
+
+    // Transient/model-availability failures (404, or 5xx from Google's
+    // side) get one retry on the same model, then one attempt on the
+    // fallback model, before giving up. 429 (rate limit) and 400 (bad
+    // request — e.g. safety block) are NOT retried, since retrying won't
+    // help and just burns quota/time on an error that will recur.
+    const isTransient = (status: number) => status === 404 || status >= 500;
+
+    let geminiResponse = await callModel(IMAGE_MODEL);
+    let modelUsed = IMAGE_MODEL;
+
+    if (!geminiResponse.ok && isTransient(geminiResponse.status)) {
+      console.warn(`${IMAGE_MODEL} returned ${geminiResponse.status}, retrying once...`);
+      geminiResponse = await callModel(IMAGE_MODEL);
+    }
+
+    if (!geminiResponse.ok && isTransient(geminiResponse.status)) {
+      console.warn(`${IMAGE_MODEL} still failing (${geminiResponse.status}), falling back to ${FALLBACK_MODEL}...`);
+      geminiResponse = await callModel(FALLBACK_MODEL);
+      modelUsed = FALLBACK_MODEL;
+    }
 
     if (!geminiResponse.ok) {
       const errorData = await geminiResponse.json().catch(() => ({}));
-      console.error("Gemini Interactions API error:", geminiResponse.status, errorData);
+      console.error(`Gemini Interactions API error (model=${modelUsed}):`, geminiResponse.status, errorData);
 
       let message =
         `Image generation failed with status ${geminiResponse.status}`;
@@ -141,7 +171,7 @@ Deno.serve(async (req: Request) => {
         message = "Gemini API key is invalid or lacks the required permissions.";
       } else if (geminiResponse.status === 404) {
         message =
-          "Image generation model not found for this API key/project. It may need to be enabled, or the model name may have changed.";
+          "Image generation is temporarily unavailable on Google's side. Please try again in a moment.";
       } else if (geminiResponse.status === 400) {
         message = errorData?.error?.message ||
           "Invalid request sent to the image API. Try rephrasing your prompt.";
