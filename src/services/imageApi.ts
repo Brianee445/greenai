@@ -4,9 +4,17 @@ import { supabase } from '../lib/supabase';
 // which holds the real GEMINI_API_KEY server-side — the same key used by
 // chat (v1-chat-completion). No key ever lives in this file or the browser.
 
-export const generateImage = async (prompt: string): Promise<{ url: string; blob: Blob }> => {
+interface ImageInput {
+  data: string;      // base64, no data: prefix
+  mimeType: string;
+}
+
+export const generateImage = async (
+  prompt: string,
+  images?: ImageInput[]
+): Promise<{ url: string; blob: Blob }> => {
   const { data, error } = await supabase.functions.invoke('generate-image', {
-    body: { prompt },
+    body: { prompt, images },
   });
 
   if (error) {
