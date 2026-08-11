@@ -84,6 +84,11 @@ Deno.serve(async (req: Request) => {
     // send more than a handful at once.
     const safeImages = images.slice(0, 6);
 
+    console.log(
+      `generate-image request: prompt length=${prompt.length}, images received=${images.length}, images used=${safeImages.length}` +
+      (safeImages.length > 0 ? `, first image size=${safeImages[0].data?.length ?? 0} chars, mimeType=${safeImages[0].mimeType}` : "")
+    );
+
     const inputBlocks: Record<string, unknown>[] = safeImages.map((img) => ({
       type: "image",
       mime_type: img.mimeType,
