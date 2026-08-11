@@ -26,8 +26,14 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+interface ImageInput {
+  data: string;      // base64, no data: prefix
+  mimeType: string;
+}
+
 interface ImageRequestBody {
   prompt: string;
+  images?: ImageInput[]; // uploaded photos to edit/refine, up to a few
 }
 
 // If Google renames/retires this alias, check
@@ -61,7 +67,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     const body: ImageRequestBody = await req.json();
-    const { prompt } = body;
+    const { prompt, images = [] } = body;
 
     if (!prompt || typeof prompt !== "string") {
       return new Response(
@@ -73,6 +79,24 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // Cap reference images defensively — the model supports up to ~10-14
+    // depending on variant, but a chat UI attachment flow has no reason to
+    // send more than a handful at once.
+    const safeImages = images.slice(0, 6);
+
+    const inputBlocks: Record<string, unknown>[] = safeImages.map((img) => ({
+      type: "image",
+      mime_type: img.mimeType,
+      data: img.data,
+    }));
+
+    inputBlocks.push({
+      type: "text",
+      text: safeImages.length > 0
+        ? prompt // editing an uploaded photo — send the user's instruction as-is, image(s) provide the subject
+        : `Generate a high-quality, detailed image based on this description: ${prompt}`,
+    });
+
     const geminiResponse = await fetch(API_URL, {
       method: "POST",
       headers: {
@@ -81,12 +105,7 @@ Deno.serve(async (req: Request) => {
       },
       body: JSON.stringify({
         model: IMAGE_MODEL,
-        input: [
-          {
-            type: "text",
-            text: `Generate a high-quality, detailed image based on this description: ${prompt}`,
-          },
-        ],
+        input: inputBlocks,
       }),
     });
 
