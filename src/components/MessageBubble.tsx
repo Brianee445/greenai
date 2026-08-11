@@ -427,7 +427,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               className="text-[11px] mt-0.5"
               style={{ color: darkMode ? '#8e8ea0' : '#acacac' }}
             >
-              GREEN AI can make mistakes. Check important info.
+              GREEN AI
             </p>
           )}
         </div>
