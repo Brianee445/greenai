@@ -93,7 +93,11 @@ Deno.serve(async (req: Request) => {
     inputBlocks.push({
       type: "text",
       text: safeImages.length > 0
-        ? prompt // editing an uploaded photo — send the user's instruction as-is, image(s) provide the subject
+        // Editing an uploaded photo: without explicit "keep everything else
+        // the same" framing, the model tends to treat a casual instruction
+        // as license to regenerate the whole scene rather than edit it —
+        // this is Google's own documented pattern for reliable edits.
+        ? `Using the provided image, ${prompt}. Keep everything else in the image exactly the same — the subject, their appearance, the composition, and the style — unless the instruction explicitly asks to change it.`
         : `Generate a high-quality, detailed image based on this description: ${prompt}`,
     });
 
