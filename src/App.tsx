@@ -176,7 +176,20 @@ export default function App() {
 
     try {
       if (imageGen) {
-        const { url } = await generateImage(text);
+        // Attached photos (if any) get sent alongside the prompt so the
+        // model edits/refines them, rather than generating from text alone.
+        const imageInputs = (files ?? [])
+          .filter((f: any) => f.type === 'image' && typeof f.preview === 'string')
+          .map((f: any) => {
+            const [header, base64] = f.preview.split(',');
+            const mimeMatch = header.match(/data:(.*?);base64/);
+            return {
+              data: base64,
+              mimeType: mimeMatch ? mimeMatch[1] : (f.file?.type || 'image/png'),
+            };
+          });
+
+        const { url } = await generateImage(text, imageInputs.length ? imageInputs : undefined);
 
         if (activeRequestIdRef.current !== requestId) return;
 
