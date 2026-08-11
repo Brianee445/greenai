@@ -24,6 +24,46 @@ function saveToStorage(key: string, value: unknown): void {
   }
 }
 
+// Merge DB and local conversation lists, keeping whichever copy of each
+// conversation is actually newer. This is what prevents a stale DB read
+// (e.g. because an earlier background sync silently failed — expired auth
+// token, network blip, whatever) from clobbering fresher data that's
+// already sitting safely in localStorage. Without this, ANY sync failure
+// anywhere in the app's lifetime becomes a permanent, silent data-loss bug
+// the next time the page loads.
+function reconcileConversations(
+  dbConversations: Conversation[],
+  localConversations: Conversation[]
+): Conversation[] {
+  const byId = new Map<string, Conversation>();
+
+  for (const conv of localConversations) {
+    byId.set(conv.id, conv);
+  }
+
+  for (const dbConv of dbConversations) {
+    const localConv = byId.get(dbConv.id);
+    if (!localConv || (dbConv.updatedAt ?? 0) >= (localConv.updatedAt ?? 0)) {
+      byId.set(dbConv.id, dbConv);
+    }
+    // else: local copy is newer, keep it (already in the map)
+  }
+
+  return Array.from(byId.values()).sort(
+    (a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)
+  );
+}
+
+function isAuthTokenError(err: unknown): boolean {
+  const msg = (err as { message?: string; code?: string })?.message ?? '';
+  const code = (err as { message?: string; code?: string })?.code ?? '';
+  return (
+    code === 'refresh_token_not_found' ||
+    msg.toLowerCase().includes('refresh token') ||
+    msg.toLowerCase().includes('jwt')
+  );
+}
+
 export function useChatStorage(user: { id: string } | null) {
   const isAuthenticated = !!user;
   const userId = user?.id ?? null;
@@ -38,9 +78,13 @@ export function useChatStorage(user: { id: string } | null) {
     () => `conv-${Date.now()}`
   );
   const [loadedFromDb, setLoadedFromDb] = useState(false);
+  // Surfaced so the UI can optionally show a subtle "not synced" indicator
+  // instead of failures being completely invisible, as they were before.
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   const prevUserIdRef = useRef(userId);
   const initialLoadDoneRef = useRef(false);
+  const syncRetryCountRef = useRef(0);
 
   // ─── Bootstrap: fetch from Supabase on auth or auth change ──────────────
 
@@ -61,29 +105,66 @@ export function useChatStorage(user: { id: string } | null) {
 
     fetchConversations(userId)
       .then(async (dbConversations) => {
-        if (dbConversations.length > 0) {
-          setConversationsState(dbConversations);
-          setMessagesState(dbConversations[0]?.messages ?? []);
-          setCurrentConversationId(dbConversations[0]?.id ?? `conv-${Date.now()}`);
+        const localConvs = loadFromStorage<Conversation[]>('greenai-conversations', []);
+
+        if (dbConversations.length > 0 || localConvs.length > 0) {
+          // Reconcile instead of blindly trusting the DB — a DB copy that's
+          // older than what's already in localStorage means an earlier
+          // sync failed silently, and we should not let that stale data
+          // win.
+          const merged = reconcileConversations(dbConversations, localConvs);
+          setConversationsState(merged);
+          setMessagesState(merged[0]?.messages ?? []);
+          setCurrentConversationId(merged[0]?.id ?? `conv-${Date.now()}`);
+
+          // If localStorage had conversations the DB didn't know about (or
+          // had newer versions of ones it did), push those up now instead
+          // of waiting for the next edit to trigger a sync.
+          const dbIds = new Set(dbConversations.map((c) => c.id));
+          const needsPush = merged.filter((c) => {
+            const dbConv = dbConversations.find((d) => d.id === c.id);
+            return !dbIds.has(c.id) || (dbConv && (c.updatedAt ?? 0) > (dbConv.updatedAt ?? 0));
+          });
+          for (const conv of needsPush) {
+            try {
+              await upsertConversation(userId, conv);
+              await upsertMessages(conv.id, userId, conv.messages);
+            } catch (err) {
+              console.error('Failed to push locally-newer conversation to DB:', err);
+            }
+          }
         } else {
-          const localConvs = loadFromStorage<Conversation[]>('greenai-conversations', []);
-          if (localConvs.length > 0) {
-            const count = await migrateFromLocalStorage(userId);
-            if (count > 0) {
-              const migrated = await fetchConversations(userId);
-              if (migrated.length > 0) {
-                setConversationsState(migrated);
-                setMessagesState(migrated[0]?.messages ?? []);
-                setCurrentConversationId(migrated[0]?.id ?? `conv-${Date.now()}`);
-              }
+          // Neither DB nor local has anything for this user — nothing to
+          // reconcile, but still worth checking for a legacy pre-account
+          // localStorage payload to migrate in.
+          const count = await migrateFromLocalStorage(userId).catch(() => 0);
+          if (count > 0) {
+            const migrated = await fetchConversations(userId).catch(() => []);
+            if (migrated.length > 0) {
+              setConversationsState(migrated);
+              setMessagesState(migrated[0]?.messages ?? []);
+              setCurrentConversationId(migrated[0]?.id ?? `conv-${Date.now()}`);
             }
           }
         }
+
+        setSyncError(null);
         setLoadedFromDb(true);
         initialLoadDoneRef.current = true;
       })
       .catch((err) => {
         console.error('Failed to load conversations from DB:', err);
+
+        // Auth is broken (expired/invalid refresh token, etc.) — the
+        // safest thing to do is keep whatever's already in localStorage
+        // (already the initial state) rather than resetting to empty, and
+        // let the user know sync is degraded rather than staying silent.
+        if (isAuthTokenError(err)) {
+          setSyncError('Your session needs refreshing — sign out and back in to restore cloud sync.');
+        } else {
+          setSyncError('Could not reach the server — showing your locally saved chats.');
+        }
+
         setLoadedFromDb(true);
         initialLoadDoneRef.current = true;
       });
@@ -133,8 +214,29 @@ export function useChatStorage(user: { id: string } | null) {
           await upsertConversation(userId, currentConv);
           await upsertMessages(currentConversationId, userId, messages);
         }
+
+        syncRetryCountRef.current = 0;
+        setSyncError(null);
       } catch (err) {
         console.error('Sync failed:', err);
+
+        if (isAuthTokenError(err)) {
+          // Retrying won't help a dead token — surface it plainly instead
+          // of silently retrying forever. localStorage still has the data,
+          // so nothing is lost, but it won't reach the DB until re-auth.
+          setSyncError('Your session needs refreshing — sign out and back in to restore cloud sync.');
+          return;
+        }
+
+        // Transient failure (network blip, etc.) — retry a few times with
+        // backoff before giving up and surfacing it, instead of either
+        // silently dropping it forever or hammering the server.
+        if (syncRetryCountRef.current < 3) {
+          syncRetryCountRef.current += 1;
+          setSyncError('Sync is having trouble — retrying…');
+        } else {
+          setSyncError('Could not sync to the server. Your chats are saved on this device only for now.');
+        }
       }
     }, 1500);
 
@@ -262,5 +364,6 @@ export function useChatStorage(user: { id: string } | null) {
     loadConversation,
     handleNewChat,
     handleDeleteConversation,
+    syncError,
   };
 }
