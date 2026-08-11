@@ -18,8 +18,24 @@ export const generateImage = async (
   });
 
   if (error) {
-    console.error('Error invoking generate-image function:', error);
-    throw new Error(error.message || 'Failed to generate image');
+    // supabase-js's FunctionsHttpError.message is just a generic
+    // "Edge Function returned a non-2xx status code" — the actual error
+    // body our function sent (e.g. "Rate limit exceeded", "No image was
+    // returned...") lives on error.context, which is the raw Response
+    // object. Read it directly instead of surfacing the generic message.
+    let detailedMessage: string | undefined;
+    try {
+      const context = (error as { context?: Response }).context;
+      if (context && typeof context.json === 'function') {
+        const body = await context.json();
+        detailedMessage = body?.error;
+      }
+    } catch {
+      // context wasn't readable JSON — fall through to generic message
+    }
+
+    console.error('Error invoking generate-image function:', detailedMessage || error.message, error);
+    throw new Error(detailedMessage || error.message || 'Failed to generate image');
   }
 
   if (data?.error) {
