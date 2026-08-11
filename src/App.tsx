@@ -176,6 +176,7 @@ export default function App() {
 
     try {
       if (imageGen) {
+        console.log('[image-gen] files received in handleSendMessage:', files);
         // Attached photos (if any) get sent alongside the prompt so the
         // model edits/refines them, rather than generating from text alone.
         const imageInputs = (files ?? [])
@@ -188,6 +189,7 @@ export default function App() {
               mimeType: mimeMatch ? mimeMatch[1] : (f.file?.type || 'image/png'),
             };
           });
+        console.log('[image-gen] imageInputs after filter/map:', imageInputs.length, imageInputs[0] ? { mimeType: imageInputs[0].mimeType, dataLength: imageInputs[0].data?.length } : null);
 
         const { url } = await generateImage(text, imageInputs.length ? imageInputs : undefined);
 
