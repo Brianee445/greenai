@@ -12,7 +12,7 @@ interface ImageInput {
 export const generateImage = async (
   prompt: string,
   images?: ImageInput[]
-): Promise<{ url: string; blob: Blob }> => {
+): Promise<{ url: string; isPersistent: boolean }> => {
   const { data, error } = await supabase.functions.invoke('generate-image', {
     body: { prompt, images },
   });
@@ -42,16 +42,23 @@ export const generateImage = async (
     throw new Error(data.error);
   }
 
-  if (!data?.image) {
-    throw new Error('No image data returned');
+  // Preferred path: the function uploaded to Supabase Storage and gave us
+  // a permanent URL — this is what survives a page refresh.
+  if (data?.url) {
+    return { url: data.url, isPersistent: true };
   }
 
-  const mimeType = data.mimeType || 'image/png';
-  const blob = base64ToBlob(data.image, mimeType);
-  const url = URL.createObjectURL(blob);
+  // Fallback path: Storage upload wasn't available server-side, so we only
+  // got base64 back. This still displays fine in the current session, but
+  // the resulting blob: URL will NOT survive a refresh or new session.
+  if (data?.image) {
+    const mimeType = data.mimeType || 'image/png';
+    const blob = base64ToBlob(data.image, mimeType);
+    const url = URL.createObjectURL(blob);
+    return { url, isPersistent: false };
+  }
 
-  // Return both so the caller can revoke the URL and download without re-fetching
-  return { url, blob };
+  throw new Error('No image data returned');
 };
 
 const base64ToBlob = (base64: string, mimeType: string): Blob => {
