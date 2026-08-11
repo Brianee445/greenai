@@ -25,6 +25,11 @@ interface ChatInputProps {
   placeholder?: string;
   darkMode: boolean;
   onAuthRequired?: (feature: string) => void;
+  // Set when the user taps "Edit this image" on a generated image in the
+  // chat history — this component fetches it, attaches it like a normal
+  // upload, and switches on Image mode so the next send edits it.
+  pendingEditImage?: string | null;
+  onEditImageConsumed?: () => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -34,6 +39,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   placeholder = 'Message GREEN AI',
   darkMode,
   onAuthRequired,
+  pendingEditImage,
+  onEditImageConsumed,
 }) => {
   const [message, setMessage] = useState('');
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
@@ -48,6 +55,46 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   const audioInputRef    = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef   = useRef<Blob[]>([]);
+
+  // Consume a "edit this image" request from the chat history: fetch the
+  // (now-permanent, since it's Storage-backed) image URL, turn it into the
+  // same UploadedFile shape a normal attachment would produce, and switch
+  // to Image mode so the very next send edits it.
+  useEffect(() => {
+    if (!pendingEditImage) return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(pendingEditImage);
+        const blob = await res.blob();
+        const mimeType = blob.type || 'image/png';
+        const ext = mimeType.split('/')[1] || 'png';
+        const file = new File([blob], `edit-source.${ext}`, { type: mimeType });
+
+        const preview: string = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error('Failed to read image for editing'));
+          reader.readAsDataURL(blob);
+        });
+
+        if (cancelled) return;
+
+        setUploadedFiles(prev => [...prev, { file, type: 'image', preview }]);
+        setImageGenEnabled(true);
+        setWebSearchEnabled(false);
+      } catch (err) {
+        console.error('Failed to load image for editing:', err);
+      } finally {
+        if (!cancelled) onEditImageConsumed?.();
+      }
+    })();
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingEditImage]);
 
   // Auto-resize textarea. Max height raised from 200px to 320px so the box
   // scales further with longer messages before it starts internally scrolling.

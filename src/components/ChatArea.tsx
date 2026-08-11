@@ -12,6 +12,7 @@ interface ChatAreaProps {
   companionMode: boolean;
   userProfile: UserProfile;
   onMessageReaction: (messageId: string, reaction: 'like' | 'dislike') => void;
+  onEditImage?: (imageUrl: string) => void;
 }
 
 export const ChatArea: React.FC<ChatAreaProps> = ({ 
@@ -21,7 +22,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   currentMode, 
   companionMode, 
   userProfile,
-  onMessageReaction 
+  onMessageReaction,
+  onEditImage,
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -64,6 +66,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             darkMode={darkMode} 
             userProfile={userProfile}
             onReaction={onMessageReaction}
+            onEditImage={onEditImage}
+            onImageLoad={() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })}
           />
         ))}
         

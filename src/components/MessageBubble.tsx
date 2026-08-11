@@ -7,6 +7,8 @@ interface MessageBubbleProps {
   darkMode: boolean;
   userProfile: UserProfile;
   onReaction: (messageId: string, reaction: 'like' | 'dislike') => void;
+  onEditImage?: (imageUrl: string) => void;
+  onImageLoad?: () => void;
 }
 
 // Download functions
@@ -172,8 +174,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   darkMode,
   userProfile,
   onReaction,
+  onEditImage,
+  onImageLoad,
 }) => {
   const [copied, setCopied] = React.useState(false);
+  const [viewerOpen, setViewerOpen] = React.useState(false);
   const isUser = message.sender === 'user';
 
   const handleCopy = async () => {
@@ -197,7 +202,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           : <AIAvatar />
         }
 
-        <div className={`flex flex-col gap-1.5 max-w-[85%] ${isUser ? 'items-end' : 'items-start'}`}>
+        <div className={`flex flex-col gap-1.5 ${message.imageUrl ? 'max-w-[92%] sm:max-w-md w-full' : 'max-w-[85%]'} ${isUser ? 'items-end' : 'items-start'}`}>
 
           {!isUser && (
             <div className="flex items-center gap-2">
@@ -234,13 +239,73 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
           )}
 
           {message.imageUrl ? (
-            <div className="rounded-2xl overflow-hidden border max-w-xs sm:max-w-sm" style={{ borderColor: darkMode ? '#3a3a3a' : '#e5e5e5' }}>
-              <img
-                src={message.imageUrl}
-                alt={message.text || 'AI generated image'}
-                className="w-full h-auto block"
-              />
-            </div>
+            <>
+              <button
+                type="button"
+                onClick={() => setViewerOpen(true)}
+                className="rounded-2xl overflow-hidden border w-full text-left cursor-zoom-in"
+                style={{ borderColor: darkMode ? '#3a3a3a' : '#e5e5e5' }}
+              >
+                <img
+                  src={message.imageUrl}
+                  alt={message.text || 'AI generated image'}
+                  className="w-full h-auto block"
+                  onLoad={onImageLoad}
+                />
+              </button>
+
+              {viewerOpen && (
+                <div
+                  className="fixed inset-0 z-50 flex flex-col bg-black/90"
+                  onClick={() => setViewerOpen(false)}
+                >
+                  <div className="flex justify-end p-4">
+                    <button
+                      type="button"
+                      onClick={() => setViewerOpen(false)}
+                      aria-label="Close"
+                      className="w-9 h-9 flex items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <div className="flex-1 flex items-center justify-center px-4 overflow-hidden">
+                    <img
+                      src={message.imageUrl}
+                      alt={message.text || 'AI generated image'}
+                      className="max-w-full max-h-full object-contain"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </div>
+
+                  <div
+                    className="flex items-center justify-center gap-3 p-4 pb-8"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {onEditImage && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onEditImage(message.imageUrl!);
+                          setViewerOpen(false);
+                        }}
+                        className="px-5 py-2.5 rounded-full text-sm font-medium bg-white text-black hover:bg-gray-100 transition-colors"
+                      >
+                        Edit this image
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => downloadGeneratedImage(message.imageUrl!)}
+                      className="px-5 py-2.5 rounded-full text-sm font-medium bg-white/10 text-white border border-white/20 hover:bg-white/20 transition-colors"
+                    >
+                      Download
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
           ) : isUser ? (
             <div className={`px-4 py-2.5 rounded-[18px] rounded-tr-[4px] text-[15px] leading-relaxed ${
               darkMode
@@ -355,6 +420,15 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
               </button>
 
             </div>
+          )}
+
+          {!isUser && (
+            <p
+              className="text-[11px] mt-0.5"
+              style={{ color: darkMode ? '#8e8ea0' : '#acacac' }}
+            >
+              GREEN AI can make mistakes. Check important info.
+            </p>
           )}
         </div>
       </div>
