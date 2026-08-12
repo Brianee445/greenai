@@ -23,7 +23,7 @@
 //   supabase secrets set AGENTROUTER_API_KEY=your-agentrouter-key-here
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-const AGENTROUTER_API_KEY = Deno.env.get("AGENT_ROUTER_API_KEY");
+const AGENT_ROUTER_API_KEY = Deno.env.get("AGENT_ROUTER_API_KEY");
 
 // AgentRouter is OpenAI-compatible. Change this to whichever of the
 // account's available models you want as the fallback — as of this
