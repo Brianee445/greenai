@@ -84,8 +84,8 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  if (!GEMINI_API_KEY && !AGENTROUTER_API_KEY) {
-    console.error("Neither GEMINI_API_KEY nor AGENTROUTER_API_KEY is set");
+  if (!GEMINI_API_KEY && !AGENT_ROUTER_API_KEY) {
+    console.error("Neither GEMINI_API_KEY nor AGENT_ROUTER_API_KEY is set");
     return new Response(
       JSON.stringify({ error: "Server is not configured correctly." }),
       {
@@ -174,14 +174,14 @@ Deno.serve(async (req: Request) => {
       const errorData = await geminiResponse.json().catch(() => ({}));
       console.error("Gemini API error:", geminiResponse.status, errorData);
 
-      if (AGENTROUTER_API_KEY) {
+      if (AGENT_ROUTER_API_KEY) {
         console.warn("Gemini failed, trying AgentRouter fallback (text only)...");
         try {
           const orResponse = await fetch(AGENTROUTER_URL, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "Authorization": `Bearer ${AGENTROUTER_API_KEY}`,
+              "Authorization": `Bearer ${AGENT_ROUTER_API_KEY}`,
             },
             body: JSON.stringify({
               model: AGENTROUTER_MODEL,
